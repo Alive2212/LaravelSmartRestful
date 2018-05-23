@@ -1,7 +1,7 @@
 {
     "name": "Alive2212/LaravelSmartRestful",
     "type": "library",
-    "description": ":package_description",
+    "description": "Laravel Smart Restful",
     "keywords": [
         "Alive2212",
         "LaravelSmartRestful"
@@ -10,9 +10,9 @@
     "license": "MIT",
     "authors": [
         {
-            "name": ":author_name",
-            "email": ":author_email",
-            "homepage": ":author_website",
+            "name": "Babak Nodoust",
+            "email": "alive2212@gmail.com",
+            "homepage": "babakn.com",
             "role": "Developer"
         }
     ],
