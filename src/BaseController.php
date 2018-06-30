@@ -3,16 +3,17 @@
 namespace Alive2212\LaravelSmartRestful;
 
 use Alive2212\ExcelHelper\ExcelHelper;
+use Alive2212\LaravelQueryHelper\QueryHelper;
+use Alive2212\LaravelRequestHelper\RequestHelper;
+use Alive2212\LaravelSmartResponse\ResponseModel;
+use Alive2212\LaravelSmartResponse\SmartResponse;
+use Alive2212\LaravelStringHelper\StringHelper;
 use App;
-use App\Http\Controllers\Controller;
-use App\Resources\SmartResponse;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Resources\Model\QueryHelper;
-use App\Resources\RequestHelper;
-use App\Resources\StringHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\Facades\Validator;
 
@@ -114,7 +115,6 @@ class BaseController extends Controller
      */
     public function __construct(Model $model, $middleware = [])
     {
-
         $this->modelName = (new StringHelper)->singular(strtolower($model->getTable()));
         $this->model = $model;
         array_push($middleware, 'restful');//add restful middleware
@@ -281,6 +281,7 @@ class BaseController extends Controller
      */
     public function store(Request $request)
     {
+        $response = new ResponseModel();
         // TODO must set access in middle ware
         //get user id
         $userId = auth()->id();
@@ -305,12 +306,11 @@ class BaseController extends Controller
 
         $validationErrors = $this->checkRequestValidation($request, $this->storeValidateArray);
         if ($validationErrors != null) {
-            return SmartResponse::json(
-                $this->message('validation fails'),
-                false,
-                200,
-                $validationErrors
-            );
+            if (env('APP_DEBUG',false)){
+                $response->setMessage(json_encode($validationErrors->getMessages()));
+            }
+            $response->setStatus(false);
+            return SmartResponse::response($response);
         }
         try {
             // get result of model creation
@@ -322,19 +322,16 @@ class BaseController extends Controller
                     $this->model->find($result['id'])->$pivotField()->sync(json_decode($request[$pivotField]));
                 }
             }
-            return SmartResponse::json(
-                $this->message('successful'),
-                true,
-                201,
-                $result
-            );
+            $response->setMessage('successful');
+            $response->setData(collect($result->toArray()));
+            $response->setStatus(true);
+            return SmartResponse::response($response);
         } catch (QueryException $exception) {
-            return SmartResponse::json(
-                $this->message('failed'),
-                false,
-                200,
-                $exception
-            );
+            if (env('APP_DEBUG',false)){
+                $response->setMessage($exception->getMessage());
+            }
+            $response->setStatus(false);
+            return SmartResponse::response($response);
         }
     }
 

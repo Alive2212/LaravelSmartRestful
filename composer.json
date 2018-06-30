@@ -12,32 +12,41 @@
         {
             "name": "Babak Nodoust",
             "email": "alive2212@gmail.com",
-            "homepage": "babakn.com",
+            "homepage": "http://babakn.com",
             "role": "Developer"
         }
     ],
     "require": {
-        "phoenix/eloquent-meta": "1.6.*",
+        "php": "~5.6|~7.0",
         "alive2212/laravel-excel-helper": "^1.0",
-        "teamtnt/laravel-scout-tntsearch-driver": "^3.0",
         "illuminate/support": "~5.1",
-        "php" : "~5.6|~7.0"
+        "phoenix/eloquent-meta": "1.6.*",
+        "phpoffice/phpspreadsheet": "^1.2",
+        "teamtnt/laravel-scout-tntsearch-driver": "^3.0",
+        "fico7489/laravel-pivot":"*"
     },
     "require-dev": {
         "phoenix/eloquent-meta": "1.6.*",
         "alive2212/laravel-excel-helper": "^1.0",
+        "alive2212/laravel-smart-response": "^1.0",
         "teamtnt/laravel-scout-tntsearch-driver": "^3.0",
         "phpunit/phpunit" : ">=5.4.3",
-        "squizlabs/php_codesniffer": "^2.3"
+        "laravel/framework": "5.4.*",
+        "laravel/passport": "^3.0",
+        "illuminate/http": "5.4.*",
+        "squizlabs/php_codesniffer": "^2.3",
+        "fico7489/laravel-pivot":"*"
     },
     "autoload": {
         "psr-4": {
-            "Alive2212\\LaravelSmartRestful\\": "src"
+            "Alive2212\\LaravelSmartRestful\\": "src",
+            "Alive2212\\LaravelSmartRestfulTest\\": "tests"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Alive2212\\LaravelSmartRestful\\": "tests"
+            "Alive2212\\LaravelSmartRestful\\": "src",
+            "Alive2212\\LaravelSmartRestfulTest\\": "tests"
         }
     },
     "scripts": {
