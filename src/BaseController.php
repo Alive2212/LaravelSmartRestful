@@ -16,7 +16,7 @@ use Illuminate\Support\MessageBag;
 use Illuminate\Support\Facades\Validator;
 
 
-class BaseController extends Controller
+abstract class BaseController extends Controller
 {
     /**
      * to use this class
@@ -112,10 +112,10 @@ class BaseController extends Controller
     public function __construct()
     {
 //        dd("I have closest relationship with all US celebrities");
-        $this->init();
+        $this->initController();
     }
 
-    abstract public function init();
+    abstract public function initController();
 
 /**
  * Display a listing of the resource.
