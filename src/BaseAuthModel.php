@@ -2,7 +2,7 @@
 
 namespace Alive2212\LaravelSmartRestful;
 
-use App\Resources\Reflection\ReflectionHelper;
+use App\Resources\Reflection\LaravelReflectionHelper;
 use Fico7489\Laravel\Pivot\Traits\PivotEventTrait;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Passport\HasApiTokens;
@@ -100,7 +100,7 @@ class BaseAuthModel extends Authenticatable
      */
     public function getMethods()
     {
-        return (new ReflectionHelper())->getClassMethodsNames($this,\ReflectionMethod::IS_PUBLIC);
+        return (new LaravelReflectionHelper())->getClassMethodsNames($this,\ReflectionMethod::IS_PUBLIC);
     }
 
     /**
@@ -108,7 +108,7 @@ class BaseAuthModel extends Authenticatable
      */
     public function getRelatedMethods()
     {
-        return (new ReflectionHelper())->getClassRelationMethodsNames($this);
+        return (new LaravelReflectionHelper())->getClassRelationMethodsNames($this);
     }
 
     /**

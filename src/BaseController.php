@@ -6,17 +6,14 @@ use Alive2212\ExcelHelper\ExcelHelper;
 use Alive2212\LaravelQueryHelper\QueryHelper;
 use Alive2212\LaravelRequestHelper\RequestHelper;
 use Alive2212\LaravelSmartResponse\ResponseModel;
-use Alive2212\LaravelSmartResponse\SmartResponse;
+use Alive2212\LaravelSmartResponse\SmartResponse\SmartResponse;
 use Alive2212\LaravelStringHelper\StringHelper;
-use App;
+use App\Http\Controllers\Controller;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\Facades\Validator;
-
 
 
 class BaseController extends Controller
@@ -107,18 +104,16 @@ class BaseController extends Controller
         //
     ];
 
+    protected $middlewareParams = [];
 
     /**
      * defaultController constructor.
-     * @param Model $model
-     * @param array $middleware
      */
-    public function __construct(Model $model, $middleware = [])
+    public function __construct()
     {
-        $this->modelName = (new StringHelper)->singular(strtolower($model->getTable()));
-        $this->model = $model;
-        array_push($middleware, 'restful');//add restful middleware
-        $this->middleware($middleware);
+//        dd("I have closest relationship with all US celebrities");
+        $this->model = new $this->modelName();
+        $this->middleware($this->middlewareParams);
     }
 
     /**
@@ -129,6 +124,9 @@ class BaseController extends Controller
      */
     public function index(Request $request)
     {
+        // create response model
+        $response = new ResponseModel();
+
         //set default pagination
         if (is_null($request['page']['size'])) {
             $request['page'] = ['size' => config('json-api-paginate.default_results_per_page')];
@@ -141,12 +139,13 @@ class BaseController extends Controller
 
         $validationErrors = $this->checkRequestValidation($request, $this->indexValidateArray);
         if ($validationErrors != null) {
-            return SmartResponse::json(
-                $this->message('validation_fails'),
-                false,
-                200,
-                $validationErrors
-            );
+
+            // return response
+            $response->setData(collect($validationErrors->toArray()));
+            $response->setMessage("Validation Failed");
+            $response->setStatus(false);
+            $response->setError(99);
+            return SmartResponse::response($response);
         }
         try {
             $data = $request->get('query') != null ?
@@ -157,11 +156,6 @@ class BaseController extends Controller
                 $this->model;
             if (array_key_exists('file', $request->toArray())) {
                 //TODO add relation on top if here and create a tree flatter array in array helper
-//                (new ExcelHelper())->setOptions([
-//                    'store_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
-//                    'download_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
-//                ])->table($data->get()->toArray())->createExcelFile()->store('xls', storage_path('excel/exports'));
-//                return "I am the One for hom";
                 return (new ExcelHelper())->setOptions([
                     'store_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
                     'download_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
@@ -172,34 +166,19 @@ class BaseController extends Controller
             $data = (new QueryHelper())->deepFilter($data, (new RequestHelper())->getCollectFromJson($request['filters']));
             $data = (new QueryHelper())->orderBy($data, (new RequestHelper())->getCollectFromJson($request['order_by']));
 
-            // TODO for beautiful response must be a module
-            $message = new App\Resources\MessageHelper();
-            $message->setOption('isDefault', true);
-            if ($request['beautiful_response']=='true' || $request['response']=='beautiful' || $request['response']=='flat') {
-                $getCurrentClassFunction = $this->modelName . '.' . __FUNCTION__;
-                $responseParams = (new App\Resources\Config\ConfigHelper())->getFromResponse($getCurrentClassFunction);
-                if (!is_null($responseParams)) {
-                    $message->setBeautifulData(collect($data->jsonPaginate()), $responseParams);
-                    $message->initMessage();
-                    return SmartResponse::message($message);
-                }
-            }
-            $message->setData($data->jsonPaginate());
-            $message->initMessage();
-            return SmartResponse::message($message);
+            // return response
+            $response->setData(collect($data->jsonPaginate()));
+            $response->setMessage("Successful");
+            return SmartResponse::response($response);
 
-            return SmartResponse::json(
-                $this->message('successful'),
-                true,
-                200,
-                $data->jsonPaginate()
-            );
         } catch (QueryException $exception) {
-            return SmartResponse::json(
-                $this->message('failed'),
-                false,
-                200
-            );
+
+            // return response
+            $response->setData(collect($exception->getMessage()));
+            $response->setError($exception->getCode());
+            $response->setMessage("Failed");
+            $response->setStatus(false);
+            return SmartResponse::response($response);
         }
     }
 
@@ -261,52 +240,55 @@ class BaseController extends Controller
     /**
      * Show the form for creating a new resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function create()
     {
-        return SmartResponse::json(
-            $this->message('successful'),
-            true,
-            200,
-            $this->model->getFillable()
-        );
+        // Create Response Model
+        $response = new ResponseModel();
+
+        // return response
+        $response->setData(collect($this->model->getFillable()));
+        $response->setMessage("Successful");
+        return SmartResponse::response($response);
     }
 
     /**
      * Store a newly created resource in storage.
      *
      * @param  \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function store(Request $request)
     {
+        // Create Response Model
         $response = new ResponseModel();
+
         // TODO must set access in middle ware
         //get user id
         $userId = auth()->id();
 
         //add author id into the request if doesn't exist
-        if(isset($request['author_id'])){
-            if (is_null($request['author_id'])){
+        if (isset($request['author_id'])) {
+            if (is_null($request['author_id'])) {
                 $request['author_id'] = $userId;
             }
-        }else{
+        } else {
             $request['author_id'] = $userId;
         }
 
         //add user id into the request if doesn't exist
-        if(isset($request['user_id'])){
-            if (is_null($request['user_id'])){
+        if (isset($request['user_id'])) {
+            if (is_null($request['user_id'])) {
                 $request['user_id'] = $userId;
             }
-        }else{
+        } else {
             $request['user_id'] = $userId;
         }
 
         $validationErrors = $this->checkRequestValidation($request, $this->storeValidateArray);
         if ($validationErrors != null) {
-            if (env('APP_DEBUG',false)){
+            if (env('APP_DEBUG', false)) {
                 $response->setMessage(json_encode($validationErrors->getMessages()));
             }
             $response->setStatus(false);
@@ -327,7 +309,7 @@ class BaseController extends Controller
             $response->setStatus(true);
             return SmartResponse::response($response);
         } catch (QueryException $exception) {
-            if (env('APP_DEBUG',false)){
+            if (env('APP_DEBUG', false)) {
                 $response->setMessage($exception->getMessage());
             }
             $response->setStatus(false);
@@ -343,7 +325,11 @@ class BaseController extends Controller
      */
     public function show($id)
     {
+        // Create Response Model
+        $response = new ResponseModel();
+
         try {
+
             return SmartResponse::json(
                 $this->message('successful'),
                 true,
@@ -364,27 +350,26 @@ class BaseController extends Controller
      * Show the form for editing the specified resource.
      *
      * @param  int $id
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function edit($id)
     {
+        // Create Response Model
+        $response = new ResponseModel();
+
         try {
-            return SmartResponse::json(
-                $this->message('successful'),
-                true,
-                200,
-                $this->model
-                    ->where($this->model->getKeyName(), $id)
-                    ->with(collect($this->editLoad)->count() == 0 ? $this->indexLoad: $this->editLoad)
-                    ->get()
-            );
+            $response->setMessage('Successful');
+            $response->setData($this->model
+                ->where($this->model->getKeyName(), $id)
+                ->with(collect($this->editLoad)->count() == 0 ? $this->indexLoad : $this->editLoad)
+                ->get());
+            return SmartResponse::response($response);
         } catch (ModelNotFoundException $exception) {
-            return SmartResponse::json(
-                $this->message('failed'),
-                false,
-                200,
-                $exception->getMessage()
-            );
+            $response->setData(collect($exception->getMessage()));
+            $response->setError($exception->getCode());
+            $response->setMessage('Failed');
+            $response->setStatus(false);
+            return SmartResponse::response($response);
         }
     }
 
@@ -393,49 +378,57 @@ class BaseController extends Controller
      *
      * @param  \Illuminate\Http\Request $request
      * @param  int $id
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function update(Request $request, $id)
     {
+        // Create Response Model
+        $response = new ResponseModel();
+
         $validationErrors = $this->checkRequestValidation($request, $this->updateValidateArray);
         if ($validationErrors != null) {
-            return SmartResponse::json(
-                $this->message('validation fails'),
-                false,
-                200,
-                $validationErrors
-            );
+
+            // return response
+            $response->setData(collect($validationErrors->toArray()));
+            $response->setMessage("Validation Failed");
+            $response->setStatus(false);
+            $response->setError(99);
+            return SmartResponse::response($response);
         }
         try {
             // sync many to many relation
             foreach ($this->pivotFields as $pivotField) {
                 if (collect($request[$pivotField])->count()) {
                     $pivotMethod = (new StringHelper())->toCamel($pivotField);
-                    $this->model->findOrFail($id)->$pivotMethod()->sync(json_decode($request[$pivotField],true));
+                    $this->model->findOrFail($id)->$pivotMethod()->sync(json_decode($request[$pivotField], true));
                 }
             }
             //get result of update
             $result = $this->model->findOrFail($id)->update($request->all());
-            return SmartResponse::json(
-                $this->message('successful'),
-                $result,
-                200,
-                env('APP_DEBUG') ? $this->model->find($id) : []
-            );
+
+            // return response
+            $response->setData(collect(env('APP_DEBUG') ? $this->model->find($id) : []));
+            $response->setMessage('Successful to change '.$result.' record');
+            return SmartResponse::response($response);
+
+
         } catch (ModelNotFoundException $exception) {
-            return SmartResponse::json(
-                $this->message('failed'),
-                false,
-                200,
-                $exception->getMessage()
-            );
+
+
+            // return response
+            $response->setData(collect($exception->getMessage()));
+            $response->setStatus(false);
+            $response->setMessage('Not found record');
+
+            return SmartResponse::response($response);
+
         } catch (QueryException $exception) {
-            return SmartResponse::json(
-                $this->message('failed'),
-                false,
-                200,
-                $exception->getMessage()
-            );
+            // return response
+            $response->setData(collect($exception->getMessage()));
+            $response->setStatus(false);
+            $response->setMessage('Failed');
+
+            return SmartResponse::response($response);
         }
     }
 
@@ -443,24 +436,28 @@ class BaseController extends Controller
      * Remove the specified resource from storage.
      *
      * @param  int $id
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function destroy($id)
     {
+        // Create Response Model
+        $response = new ResponseModel();
+
         try {
-            $this->model->findOrFail($id)->delete();
-            return SmartResponse::json(
-                $this->message('successful'),
-                true,
-                200
-            );
+            // return response
+            $response->setData(collect($this->model->findOrFail($id)->delete()));
+            $response->setMessage('Successful');
+
+            return SmartResponse::response($response);
+
         } catch (ModelNotFoundException $exception) {
-            return SmartResponse::json(
-                $this->message('failed'),
-                false,
-                200,
-                $exception->getMessage()
-            );
+            // return response
+            $response->setData(collect($exception->getMessage()));
+            $response->setMessage('Failed');
+            $response->setStatus(false);
+            $response->setStatusCode($exception->getCode());
+
+            return SmartResponse::response($response);
         }
     }
 }

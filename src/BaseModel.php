@@ -2,14 +2,13 @@
 
 namespace Alive2212\LaravelSmartRestful;
 
-use App\Resources\Reflection\ReflectionHelper;
-use Fico7489\Laravel\Pivot\Traits\PivotEventTrait;
+use DeepCopy\Reflection\ReflectionHelper;
 use Laravel\Scout\Searchable;
 use Illuminate\Database\Eloquent\Model;
 
 class BaseModel extends Model
 {
-    use Searchable, PivotEventTrait;
+    use Searchable;
 
     /**
      * default relations of method
