@@ -145,20 +145,20 @@ abstract class BaseController extends Controller
         //set default pagination
 
         //set page size
-        if (!isset($request->toArray()['page']['size'])){
+        if (!isset($request->toArray()['page']['size'])) {
             $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
-        }elseif(($request->get('page')['size'])==0){
+        } elseif (($request->get('page')['size']) == 0) {
             $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
-        }else{
+        } else {
             $pageSize = $request->get('page')['size'];
         }
 
         //set page number
-        if (!isset($request->get('page')['number'])){
+        if (!isset($request->get('page')['number'])) {
             $pageNumber = $this->DEFAULT_RESULT_PER_PAGE;
-        }elseif(($request->get('page')['number'])==0){
+        } elseif (($request->get('page')['number']) == 0) {
             $pageNumber = $this->DEFAULT_RESULT_PER_PAGE;
-        }else{
+        } else {
             $pageNumber = $request->get('page')['number'];
         }
         $request['page'] = $pageNumber;
@@ -310,25 +310,17 @@ abstract class BaseController extends Controller
         // Create Response Model
         $response = new ResponseModel();
 
-        // TODO must set access in middle ware
-        //get user id
-        $userId = auth()->id();
+        if (!isset($userId)) {
+            $userId = 1;
+        }
 
         //add author id into the request if doesn't exist
-        if (isset($request['author_id'])) {
-            if (is_null($request['author_id'])) {
-                $request['author_id'] = $userId;
-            }
-        } else {
+        if (is_null($request->get('author_id'))) {
             $request['author_id'] = $userId;
         }
 
         //add user id into the request if doesn't exist
-        if (isset($request['user_id'])) {
-            if (is_null($request['user_id'])) {
-                $request['user_id'] = $userId;
-            }
-        } else {
+        if (is_null($request->get('user_id'))) {
             $request['user_id'] = $userId;
         }
 
