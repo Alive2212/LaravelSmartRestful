@@ -26,7 +26,15 @@ abstract class BaseController extends Controller
      * define your rules for index,store and update
      */
 
+    /**
+     * @var int
+     */
     protected $DEFAULT_RESULT_PER_PAGE = 15;
+
+    /**
+     * @var int
+     */
+    protected $DEFAULT_PAGE_NUMBER = 1;
 
     /**
      * @var array
@@ -131,12 +139,30 @@ abstract class BaseController extends Controller
         // create response model
         $response = new ResponseModel();
 
+        $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
+        $pageNumber = 1;
+
         //set default pagination
-        if (isset($request->toArray()['page']['size'])) {
-            if (is_null($request->toArray()['page']['size'])) {
-                $request['page'] = ['size' => $this->DEFAULT_RESULT_PER_PAGE];
-            }
+
+        //set page size
+        if (!isset($request->toArray()['page']['size'])){
+            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
+        }elseif(($request->get('page')['size'])==0){
+            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
+        }else{
+            $pageSize = $request->get('page')['size'];
         }
+
+        //set page number
+        if (!isset($request->get('page')['number'])){
+            $pageNumber = $this->DEFAULT_RESULT_PER_PAGE;
+        }elseif(($request->get('page')['number'])==0){
+            $pageNumber = $this->DEFAULT_RESULT_PER_PAGE;
+        }else{
+            $pageNumber = $request->get('page')['number'];
+        }
+        $request['page'] = $pageNumber;
+
 
         //set default ordering
         if (isset($request->toArray()['order_by'])) {
@@ -144,7 +170,6 @@ abstract class BaseController extends Controller
                 $request['order_by'] = "{\"field\":\"id\",\"operator\":\"Desc\"}";
             }
         }
-
 
         $validationErrors = $this->checkRequestValidation($request, $this->indexValidateArray);
         if ($validationErrors != null) {
@@ -188,7 +213,7 @@ abstract class BaseController extends Controller
             }
 
             // return response
-            $response->setData(collect($data->paginate()));
+            $response->setData(collect($data->setPerPage($pageSize)->paginate()));
             $response->setMessage("Successful");
             return SmartResponse::response($response);
 
@@ -432,9 +457,7 @@ abstract class BaseController extends Controller
             $response->setMessage('Successful to change ' . $result . ' record');
             return SmartResponse::response($response);
 
-
         } catch (ModelNotFoundException $exception) {
-
 
             // return response
             $response->setData(collect($exception->getMessage()));
