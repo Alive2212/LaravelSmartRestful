@@ -33,6 +33,20 @@ Via Composer
 $ composer require Alive2212/LaravelSmartRestful
 ```
 
+### Laravel
+
+### Lumen
+
+after install put following into bootstrap\app.php
+
+```php
+$app->instance('path.config', app()->basePath() . DIRECTORY_SEPARATOR . 'config');
+$app->instance('path.storage', app()->basePath() . DIRECTORY_SEPARATOR . 'storage');
+$app->register(Laravel\Scout\ScoutServiceProvider::class);
+$app->configure('scout');
+```
+
+
 ## Usage
 
 ``` php
