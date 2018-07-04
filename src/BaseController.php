@@ -367,7 +367,7 @@ abstract class BaseController extends Controller
      * Display the specdefaultied resource.
      *
      * @param  int $id
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function show($id)
     {
@@ -375,20 +375,16 @@ abstract class BaseController extends Controller
         $response = new ResponseModel();
 
         try {
+            $response->setMessage('Successful');
+            $response->setData(collect($this->model->findOrFail($id)));
+            return SmartResponse::response($response);
 
-            return SmartResponse::json(
-                $this->message('successful'),
-                true,
-                200,
-                $this->model->findOrFail($id)
-            );
         } catch (ModelNotFoundException $exception) {
-            return SmartResponse::json(
-                $this->message('failed'),
-                false,
-                200,
-                $exception->getMessage()
-            );
+            $response->setData(collect($exception->getMessage()));
+            $response->setError($exception->getCode());
+            $response->setMessage('Not Found');
+            $response->setStatus(false);
+            return SmartResponse::response($response);
         }
     }
 
@@ -462,7 +458,7 @@ abstract class BaseController extends Controller
             // return response
             $response->setData(collect($exception->getMessage()));
             $response->setStatus(false);
-            $response->setMessage('Not found record');
+            $response->setMessage('Not Found');
 
             return SmartResponse::response($response);
 
