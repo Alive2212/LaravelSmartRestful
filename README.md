@@ -33,6 +33,12 @@ Via Composer
 $ composer require Alive2212/LaravelSmartRestful
 ```
 
+install language
+``` bash
+$ php artisan vendor:publish --tag=laravel_smart_restful.lang
+```
+
+
 ### Laravel
 
 ### Lumen

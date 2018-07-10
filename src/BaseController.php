@@ -8,7 +8,9 @@ use Alive2212\LaravelRequestHelper\RequestHelper;
 use Alive2212\LaravelSmartResponse\ResponseModel;
 use Alive2212\LaravelSmartResponse\SmartResponse\SmartResponse;
 use Alive2212\LaravelStringHelper\StringHelper;
+use App\Car;
 use App\Http\Controllers\Controller;
+use App\Location;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -25,6 +27,8 @@ abstract class BaseController extends Controller
      * override __constructor and define your model
      * define your rules for index,store and update
      */
+
+    protected $locale = 'en';
 
     /**
      * @var int
@@ -123,7 +127,11 @@ abstract class BaseController extends Controller
     public function __construct()
     {
 //        dd("I have closest relationship with all US celebrities");
+        // init controller
         $this->initController();
+
+        // set local language
+        $this->setLocale();
     }
 
     abstract public function initController();
@@ -176,7 +184,7 @@ abstract class BaseController extends Controller
 
             // return response
             $response->setData(collect($validationErrors->toArray()));
-            $response->setMessage("Validation Failed");
+            $response->setMessage($this->getTrans('index', 'failed_validation'));
             $response->setStatus(false);
             $response->setError(99);
             return SmartResponse::response($response);
@@ -213,8 +221,8 @@ abstract class BaseController extends Controller
             }
 
             // return response
-            $response->setData(collect($data->setPerPage($pageSize)->paginate()));
-            $response->setMessage("Successful");
+            $response->setData(collect($data->paginate($pageSize)));
+            $response->setMessage($this->getTrans('index', 'successful'));
             return SmartResponse::response($response);
 
         } catch (QueryException $exception) {
@@ -222,7 +230,7 @@ abstract class BaseController extends Controller
             // return response
             $response->setData(collect($exception->getMessage()));
             $response->setError($exception->getCode());
-            $response->setMessage("Failed");
+            $response->setMessage($this->getTrans('index', 'failed'));
             $response->setStatus(false);
             return SmartResponse::response($response);
         }
@@ -295,7 +303,7 @@ abstract class BaseController extends Controller
 
         // return response
         $response->setData(collect($this->model->getFillable()));
-        $response->setMessage("Successful");
+        $response->setMessage($this->getTrans('create', 'successful'));
         return SmartResponse::response($response);
     }
 
@@ -325,6 +333,7 @@ abstract class BaseController extends Controller
         }
 
         $validationErrors = $this->checkRequestValidation($request, $this->storeValidateArray);
+
         if ($validationErrors != null) {
             if (env('APP_DEBUG', false)) {
                 $response->setMessage(json_encode($validationErrors->getMessages()));
@@ -342,17 +351,18 @@ abstract class BaseController extends Controller
                     $this->model->find($result['id'])->$pivotField()->sync(json_decode($request[$pivotField]));
                 }
             }
-            $response->setMessage('successful');
+            $response->setMessage($this->getTrans('store', 'successful'));
             $response->setData(collect($result->toArray()));
             $response->setStatus(true);
-            return SmartResponse::response($response);
         } catch (QueryException $exception) {
-            if (env('APP_DEBUG', false)) {
-                $response->setMessage($exception->getMessage());
-            }
+            $response->setError($exception->getCode());
+            $response->setMessage($this->getTrans('store', 'failed'));
             $response->setStatus(false);
-            return SmartResponse::response($response);
+            if (env('APP_DEBUG', false)) {
+                $response->setData(collect($exception->getMessage()));
+            }
         }
+        return SmartResponse::response($response);
     }
 
     /**
@@ -366,18 +376,21 @@ abstract class BaseController extends Controller
         // Create Response Model
         $response = new ResponseModel();
 
+        // try to get data
         try {
-            $response->setMessage('Successful');
+            $response->setMessage($this->getTrans('show', 'successful'));
             $response->setData(collect($this->model->findOrFail($id)));
-            return SmartResponse::response($response);
 
+            // catch exception
         } catch (ModelNotFoundException $exception) {
-            $response->setData(collect($exception->getMessage()));
             $response->setError($exception->getCode());
-            $response->setMessage('Not Found');
+            $response->setMessage($this->getTrans('show', 'failed'));
             $response->setStatus(false);
-            return SmartResponse::response($response);
+            if (env('APP_DEBUG', false)) {
+                $response->setData(collect($exception->getMessage()));
+            }
         }
+        return SmartResponse::response($response);
     }
 
     /**
@@ -392,19 +405,23 @@ abstract class BaseController extends Controller
         $response = new ResponseModel();
 
         try {
-            $response->setMessage('Successful');
+            $response->setMessage($this->getTrans('edit', 'successful'));
             $response->setData($this->model
                 ->where($this->model->getKeyName(), $id)
                 ->with(collect($this->editLoad)->count() == 0 ? $this->indexLoad : $this->editLoad)
                 ->get());
-            return SmartResponse::response($response);
+
         } catch (ModelNotFoundException $exception) {
-            $response->setData(collect($exception->getMessage()));
             $response->setError($exception->getCode());
-            $response->setMessage('Failed');
+            $response->setMessage($this->getTrans('edit', 'failed'));
             $response->setStatus(false);
-            return SmartResponse::response($response);
+            if (env('APP_DEBUG', false)) {
+                $response->setData(collect($exception->getMessage()));
+            }
+
         }
+
+        return SmartResponse::response($response);
     }
 
     /**
@@ -421,14 +438,14 @@ abstract class BaseController extends Controller
 
         $validationErrors = $this->checkRequestValidation($request, $this->updateValidateArray);
         if ($validationErrors != null) {
-
-            // return response
             $response->setData(collect($validationErrors->toArray()));
-            $response->setMessage("Validation Failed");
+            $response->setMessage($this->getTrans('update', 'failed_validation'));
             $response->setStatus(false);
             $response->setError(99);
             return SmartResponse::response($response);
+
         }
+
         try {
             // sync many to many relation
             foreach ($this->pivotFields as $pivotField) {
@@ -442,26 +459,31 @@ abstract class BaseController extends Controller
 
             // return response
             $response->setData(collect(env('APP_DEBUG') ? $this->model->find($id) : []));
-            $response->setMessage('Successful to change ' . $result . ' record');
-            return SmartResponse::response($response);
+            $response->setMessage(
+                $this->getTrans('update', 'successful1') .
+                $result .
+                $this->getTrans('update', 'successful2')
+            );
 
         } catch (ModelNotFoundException $exception) {
-
-            // return response
-            $response->setData(collect($exception->getMessage()));
             $response->setStatus(false);
-            $response->setMessage('Not Found');
-
-            return SmartResponse::response($response);
+            $response->setMessage($this->getTrans('update', 'model_not_found'));
+            $response->setError($exception->getCode());
+            if (env('APP_DEBUG', false)) {
+                $response->setData(collect($exception->getMessage()));
+            }
 
         } catch (QueryException $exception) {
-            // return response
-            $response->setData(collect($exception->getMessage()));
             $response->setStatus(false);
-            $response->setMessage('Failed');
+            $response->setMessage($this->getTrans('update', 'failed'));
+            $response->setError($exception->getCode());
+            if (env('APP_DEBUG', false)) {
+                $response->setData(collect($exception->getMessage()));
+            }
 
-            return SmartResponse::response($response);
         }
+
+        return SmartResponse::response($response);
     }
 
     /**
@@ -476,20 +498,37 @@ abstract class BaseController extends Controller
         $response = new ResponseModel();
 
         try {
-            // return response
             $response->setData(collect($this->model->findOrFail($id)->delete()));
-            $response->setMessage('Successful');
-
-            return SmartResponse::response($response);
+            $response->setMessage($this->getTrans('destroy', 'successful'));
 
         } catch (ModelNotFoundException $exception) {
-            // return response
-            $response->setData(collect($exception->getMessage()));
-            $response->setMessage('Failed');
+            $response->setMessage($this->getTrans('destroy', 'successful'));
             $response->setStatus(false);
             $response->setError($exception->getCode());
+            if (env('APP_DEBUG', false)) {
+                $response->setData(collect($exception->getMessage()));
+            }
 
-            return SmartResponse::response($response);
         }
+
+        return SmartResponse::response($response);
+    }
+
+    /**
+     * @param $method
+     * @param $status
+     * @return array|\Illuminate\Contracts\Translation\Translator|null|string
+     */
+    public function getTrans($method, $status)
+    {
+        return trans('laravel_smart_restful::'.'laravel_smart_restful.'.get_class($this->model) . '.' . $method . '.' . $status);
+    }
+
+    public function setLocale()
+    {
+        if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
+            $this->locale = $_SERVER['HTTP_ACCEPT_LANGUAGE'];
+        }
+        \App::setLocale($this->locale);
     }
 }
