@@ -28,8 +28,6 @@ abstract class BaseController extends Controller
      * define your rules for index,store and update
      */
 
-    protected $locale = 'en';
-
     /**
      * @var int
      */
@@ -252,33 +250,7 @@ abstract class BaseController extends Controller
         if ($validator->fails()) {
             return $validator->errors();
         }
-        if (is_numeric(array_search($request->getMethod(), ["POST", "PUT", "PATCH"]))) {
-            $errors = new MessageBag();
-            foreach ($requestParams as $requestParamKey => $requestParamValue) {
-                if (is_numeric(array_search($requestParamKey, $this->uniqueFields))) {
-                    if ($this->checkExistUniqueRecord($requestParamKey, $requestParamValue)) {
-                        $errors->add($requestParamKey, 'This ' . $requestParamKey . ' is exist try another.');
-                    }
-                }
-            }
-            if (collect($errors)->count() > 0) {
-                return $errors;
-            }
-        }
         return null;
-    }
-
-    /**
-     * @param $key
-     * @param $value
-     * @return bool
-     */
-    public function checkExistUniqueRecord($key, $value)
-    {
-        if ($this->model->where($key, $value)->count()) {
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -345,8 +317,9 @@ abstract class BaseController extends Controller
 
         if ($validationErrors != null) {
             if (env('APP_DEBUG', false)) {
-                $response->setMessage(json_encode($validationErrors->getMessages()));
+                $response->setData(collect($validationErrors->getMessages()));
             }
+            $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
             $response->setStatus(false);
             return SmartResponse::response($response);
         }
@@ -545,8 +518,7 @@ abstract class BaseController extends Controller
     public function setLocale()
     {
         if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
-            $this->locale = $_SERVER['HTTP_ACCEPT_LANGUAGE'];
+            \App::setLocale($_SERVER['HTTP_ACCEPT_LANGUAGE']);
         }
-        \App::setLocale($this->locale);
     }
 }
