@@ -102,6 +102,15 @@ abstract class BaseController extends Controller
     ];
 
     /**
+     * array of relationship for eager loading
+     *
+     * @var array
+     */
+    protected $storeLoad = [
+        //
+    ];
+
+    /**
      * store request validator rules
      *
      * @var array
@@ -352,7 +361,19 @@ abstract class BaseController extends Controller
                 }
             }
             $response->setMessage($this->getTrans('store', 'successful'));
+
+            $response->setData($result
+                ->with(
+                    collect($this->storeLoad)->count() == 0 ?
+                        $this->indexLoad :
+                        $this->storeLoad
+                )
+                ->get());
+
             $response->setData(collect($result->toArray()));
+
+
+
             $response->setStatus(true);
         } catch (QueryException $exception) {
             $response->setError($exception->getCode());
@@ -458,7 +479,10 @@ abstract class BaseController extends Controller
             $result = $this->model->findOrFail($id)->update($request->all());
 
             // return response
-            $response->setData(collect(env('APP_DEBUG') ? $this->model->find($id) : []));
+            $response->setData($this->model
+                ->where($this->model->getKeyName(), $id)
+                ->with(collect($this->updateLoad)->count() == 0 ? $this->indexLoad : $this->updateLoad)
+                ->get());
             $response->setMessage(
                 $this->getTrans('update', 'successful1') .
                 $result .
@@ -521,7 +545,7 @@ abstract class BaseController extends Controller
      */
     public function getTrans($method, $status)
     {
-        return trans('laravel_smart_restful::'.'controller.'.get_class($this->model) . '.' . $method . '.' . $status);
+        return trans('laravel_smart_restful::' . 'controller.' . get_class($this->model) . '.' . $method . '.' . $status);
     }
 
     public function setLocale()
