@@ -13,7 +13,7 @@ class LaravelSmartRestfulServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-         $this->loadTranslationsFrom(resource_path('lang/alive2212'), 'laravel_smart_restful');
+         $this->loadTranslationsFrom(resource_path('lang/vendor/alive2212'), 'laravel_smart_restful');
         // $this->loadViewsFrom(__DIR__.'/../resources/views', 'alive2212');
 //        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 //        $this->loadRoutesFrom(__DIR__.'/routes.php');
@@ -38,7 +38,7 @@ class LaravelSmartRestfulServiceProvider extends ServiceProvider
 
             // Publishing the translation files.
             $this->publishes([
-                __DIR__.'/../resources/lang/' => resource_path('lang'),
+                __DIR__.'/../resources/lang/' => resource_path('lang/vendor/alive2212'),
             ], 'laravel_smart_restful.lang');
 
             // Registering package commands.

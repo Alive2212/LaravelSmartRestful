@@ -163,9 +163,9 @@ abstract class BaseController extends Controller
 
         //set page number
         if (!isset($request->get('page')['number'])) {
-            $pageNumber = $this->DEFAULT_RESULT_PER_PAGE;
+            $pageNumber = $this->DEFAULT_PAGE_NUMBER;
         } elseif (($request->get('page')['number']) == 0) {
-            $pageNumber = $this->DEFAULT_RESULT_PER_PAGE;
+            $pageNumber = $this->DEFAULT_PAGE_NUMBER;
         } else {
             $pageNumber = $request->get('page')['number'];
         }
@@ -521,7 +521,7 @@ abstract class BaseController extends Controller
      */
     public function getTrans($method, $status)
     {
-        return trans('laravel_smart_restful::'.'laravel_smart_restful.'.get_class($this->model) . '.' . $method . '.' . $status);
+        return trans('laravel_smart_restful::'.'controller.'.get_class($this->model) . '.' . $method . '.' . $status);
     }
 
     public function setLocale()
