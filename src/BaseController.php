@@ -370,10 +370,6 @@ abstract class BaseController extends Controller
                 )
                 ->get());
 
-            $response->setData(collect($result->toArray()));
-
-
-
             $response->setStatus(true);
         } catch (QueryException $exception) {
             $response->setError($exception->getCode());
