@@ -188,10 +188,10 @@ abstract class BaseController extends Controller
 
         $validationErrors = $this->checkRequestValidation($request, $this->indexValidateArray);
         if ($validationErrors != null) {
-
-            // return response
-            $response->setData(collect($validationErrors->toArray()));
-            $response->setMessage($this->getTrans('index', 'failed_validation'));
+            if (env('APP_DEBUG', false)) {
+                $response->setData(collect($validationErrors->toArray()));
+            }
+            $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
             $response->setStatus(false);
             $response->setError(99);
             return SmartResponse::response($response);
@@ -317,12 +317,15 @@ abstract class BaseController extends Controller
 
         if ($validationErrors != null) {
             if (env('APP_DEBUG', false)) {
-                $response->setData(collect($validationErrors->getMessages()));
+                $response->setData(collect($validationErrors->toArray()));
             }
             $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
             $response->setStatus(false);
+            $response->setError(99);
             return SmartResponse::response($response);
+
         }
+
         try {
             // get result of model creation
             $result = $this->model->create($request->all());
@@ -426,8 +429,10 @@ abstract class BaseController extends Controller
 
         $validationErrors = $this->checkRequestValidation($request, $this->updateValidateArray);
         if ($validationErrors != null) {
-            $response->setData(collect($validationErrors->toArray()));
-            $response->setMessage($this->getTrans('update', 'failed_validation'));
+            if (env('APP_DEBUG', false)) {
+                $response->setData(collect($validationErrors->toArray()));
+            }
+            $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
             $response->setStatus(false);
             $response->setError(99);
             return SmartResponse::response($response);

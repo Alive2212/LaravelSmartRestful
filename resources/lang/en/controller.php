@@ -16,7 +16,7 @@ return [
     'App\User' => [
         'index' => [
             'successful' => 'Get all data successfully ',
-            'failed_validation' => 'Validation Failed',
+            'validation_failed' => 'Validation Failed',
             'failed' => 'Failed to get data',
         ],
         'create' => [
@@ -25,6 +25,7 @@ return [
         'store' => [
             'successful' => 'Get all data successfully ',
             'failed' => 'Failed to store',
+            'validation_failed' => 'Validation Failed',
         ],
         'show' => [
             'successful' => 'Get all data successfully ',
@@ -32,7 +33,7 @@ return [
         'update' => [
             'successful1' => 'successful to change ',
             'successful2' => ' record(s)',
-            'failed_validation' => 'Validation Failed',
+            'validation_failed' => 'Validation Failed',
             'failed' => 'Failed to update',
             'model_not_found' => 'Desired record Not found',
         ],
