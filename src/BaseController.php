@@ -362,12 +362,10 @@ abstract class BaseController extends Controller
             }
             $response->setMessage($this->getTrans('store', 'successful'));
 
-            $response->setData($result
-                ->with(
-                    collect($this->storeLoad)->count() == 0 ?
-                        $this->indexLoad :
-                        $this->storeLoad
-                )
+
+            $response->setData($this->model
+                ->where($this->model->getKeyName(), $result['id'])
+                ->with(collect($this->updateLoad)->count() == 0 ? $this->indexLoad : $this->updateLoad)
                 ->get());
 
             $response->setStatus(true);
