@@ -30,7 +30,7 @@ vendor/
 Via Composer
 
 ``` bash
-$ composer require Alive2212/LaravelSmartRestful
+$ composer require alive2212/laravel-smart-restful
 ```
 
 install language

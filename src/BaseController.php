@@ -392,6 +392,7 @@ abstract class BaseController extends Controller
      */
     public function edit($id)
     {
+        dd('edit');
         // Create Response Model
         $response = new ResponseModel();
 
