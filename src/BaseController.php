@@ -29,6 +29,11 @@ abstract class BaseController extends Controller
      */
 
     /**
+     * @var string
+     */
+    protected $LOCALE_PREFIX = 'controller';
+
+    /**
      * @var int
      */
     protected $DEFAULT_RESULT_PER_PAGE = 15;
@@ -518,7 +523,7 @@ abstract class BaseController extends Controller
      */
     public function getTrans($method, $status)
     {
-        return trans('laravel_smart_restful::' . 'controller.' . get_class($this->model) . '.' . $method . '.' . $status);
+        return trans('laravel_smart_restful::' . $this->LOCALE_PREFIX.'.' . get_class($this->model) . '.' . $method . '.' . $status);
     }
 
     public function setLocale()
