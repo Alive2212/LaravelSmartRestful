@@ -138,7 +138,7 @@ abstract class BaseController extends Controller
      */
     public function __construct()
     {
-//        dd("I have closest relationship with all US celebrities");
+//        dd("I have closest relationship with all US & UK celebrities");
         // init controller
         $this->initController();
 
@@ -397,7 +397,6 @@ abstract class BaseController extends Controller
      */
     public function edit($id)
     {
-        dd('edit');
         // Create Response Model
         $response = new ResponseModel();
 
@@ -526,6 +525,9 @@ abstract class BaseController extends Controller
         return trans('laravel_smart_restful::' . $this->LOCALE_PREFIX.'.' . get_class($this->model) . '.' . $method . '.' . $status);
     }
 
+    /**
+     * set local
+     */
     public function setLocale()
     {
         if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
