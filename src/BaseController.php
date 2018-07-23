@@ -29,6 +29,13 @@ abstract class BaseController extends Controller
      */
 
     /**
+     * permission types 'admin'|'branch'|'own'|'guest'
+     *
+     * @var string
+     */
+    protected $DEFAULT_PERMISSION_TYPE = 'admin';
+
+    /**
      * @var string
      */
     protected $LOCALE_PREFIX = 'controller';
@@ -156,10 +163,14 @@ abstract class BaseController extends Controller
      */
     public function index(Request $request)
     {
+        // handle permission
+        $request = $this->handlePermission($request, __FUNCTION__);
+
         // create response model
         $response = new ResponseModel();
 
         $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
+
         $pageNumber = 1;
 
         //set default pagination
@@ -209,6 +220,7 @@ abstract class BaseController extends Controller
                         ->search(($request->get('query')))
                         ->raw())->get('ids')) :
                 $this->model;
+
             if (array_key_exists('file', $request->toArray())) {
                 //TODO add relation on top if here and create a tree flatter array in array helper
                 return (new ExcelHelper())->setOptions([
@@ -301,6 +313,9 @@ abstract class BaseController extends Controller
      */
     public function store(Request $request)
     {
+        // handle permission
+        $request = $this->handlePermission($request, __FUNCTION__);
+
         // Create Response Model
         $response = new ResponseModel();
 
@@ -429,8 +444,14 @@ abstract class BaseController extends Controller
      */
     public function update(Request $request, $id)
     {
+
+
         // Create Response Model
         $response = new ResponseModel();
+
+        $modelFilter = [
+            [$this->model->getKeyName(), '=', $id],
+        ];
 
         $validationErrors = $this->checkRequestValidation($request, $this->updateValidateArray);
         if ($validationErrors != null) {
@@ -457,7 +478,7 @@ abstract class BaseController extends Controller
 
             // return response
             $response->setData($this->model
-                ->where($this->model->getKeyName(), $id)
+                ->where($modelFilter)
                 ->with(collect($this->updateLoad)->count() == 0 ? $this->indexLoad : $this->updateLoad)
                 ->get());
             $response->setMessage(
@@ -522,7 +543,7 @@ abstract class BaseController extends Controller
      */
     public function getTrans($method, $status)
     {
-        return trans('laravel_smart_restful::' . $this->LOCALE_PREFIX.'.' . get_class($this->model) . '.' . $method . '.' . $status);
+        return trans('laravel_smart_restful::' . $this->LOCALE_PREFIX . '.' . get_class($this->model) . '.' . $method . '.' . $status);
     }
 
     /**
@@ -534,4 +555,130 @@ abstract class BaseController extends Controller
             \App::setLocale($_SERVER['HTTP_ACCEPT_LANGUAGE']);
         }
     }
+
+    public function handlePermission(Request $request, $functionName, $params = [])
+    {
+        if (!isset($request['permission_type'])) {
+            $request['permission_type'] = $this->DEFAULT_PERMISSION_TYPE;
+        }
+        switch ($request['permission_type']) {
+            case 'admin':
+                return $this->handleAdminPermission($request, $functionName, $params);
+            case 'branch':
+                return $this->handleBranchPermission($request, $functionName, $params);
+            case 'own':
+                return $this->handleOwnPermission($request, $functionName, $params);
+            case 'guest':
+                return $this->handleGuestPermission($request, $functionName, $params);
+            default:
+                return $params;
+        }
+    }
+
+    public function handleAdminPermission(Request $request, $functionName, $params = [])
+    {
+        switch ($functionName) {
+            case 'index':
+            case 'store':
+            case 'show':
+            case 'edit':
+            case 'create':
+            case 'update':
+            case 'destroy':
+            default:
+                return $params;
+        }
+    }
+
+    public function handleBranchPermission(Request $request, $functionName, $params)
+    {
+        switch ($functionName) {
+            case 'index':
+            case 'store':
+            case 'show':
+            case 'edit':
+            case 'create':
+            case 'update':
+            case 'destroy':
+            default:
+                return $params;
+        }
+    }
+
+    public function handleOwnPermission(Request $request, $functionName, $params)
+    {
+        switch ($functionName) {
+            case 'index':
+                if (isset($request['filters'])) {
+                    $filters = json_decode($request['filters'], true);
+                } else {
+                    $filters = [];
+                }
+                array_push($filters, [
+                    "key" => "owner_id",
+                    "operator" => "=",
+                    "value" => auth()->id(),
+                ]);
+                $request['filters'] = json_encode($filters);
+                return $request;
+            case 'store':
+                $request['owner_id'] = auth()->id();
+                return $request;
+            case 'show':
+                $filters = [];
+                array_push($filters, [
+                    "key" => "owner_id",
+                    "operator" => "=",
+                    "value" => auth()->id(),
+                ]);
+                $request['permission_filters'] = json_encode($filters);
+                return $request;
+            case 'edit':
+                $filters = [];
+                array_push($filters, [
+                    "key" => "owner_id",
+                    "operator" => "=",
+                    "value" => auth()->id(),
+                ]);
+                $request['permission_filters'] = json_encode($filters);
+                return $request;
+            case 'create':
+            case 'update':
+                $filters = [];
+                array_push($filters, [
+                    "key" => "owner_id",
+                    "operator" => "=",
+                    "value" => auth()->id(),
+                ]);
+                $request['permission_filters'] = json_encode($filters);
+                return $request;
+            case 'destroy':
+                $filters = [];
+                array_push($filters, [
+                    "key" => "owner_id",
+                    "operator" => "=",
+                    "value" => auth()->id(),
+                ]);
+                $request['permission_filters'] = json_encode($filters);
+                return $request;
+            default:
+                return $params;
+        }
+    }
+
+    public function handleGuestPermission(Request $request, $functionName, $params)
+    {
+        switch ($functionName) {
+            case 'index':
+            case 'store':
+            case 'show':
+            case 'edit':
+            case 'create':
+            case 'update':
+            case 'destroy':
+            default:
+                return $params;
+        }
+    }
+
 }
