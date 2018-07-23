@@ -125,6 +125,18 @@ class BaseAuthLumenModel extends Model implements AuthenticatableContract, Autho
     {
         return $this->load($this->getRelatedMethods());
     }
+
+    /**
+     * Determine if the entity has a given ability.
+     *
+     * @param  string $ability
+     * @param  array|mixed $arguments
+     * @return bool
+     */
+    public function can($ability, $arguments = [])
+    {
+        // TODO: Implement can() method.
+    }
 }
 
 
