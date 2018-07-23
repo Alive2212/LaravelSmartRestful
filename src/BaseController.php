@@ -164,7 +164,7 @@ abstract class BaseController extends Controller
     public function index(Request $request)
     {
         // handle permission
-        $request = $this->handlePermission($request, __FUNCTION__);
+//        $request = $this->handlePermission($request, __FUNCTION__);
 
         // create response model
         $response = new ResponseModel();
@@ -235,12 +235,12 @@ abstract class BaseController extends Controller
             }
 
             // filters by
-            if (isset($request->toArray()['filters'])) {
+            if (!is_null($request->get('filters'))) {
                 $data = (new QueryHelper())->deepFilter($data, (new RequestHelper())->getCollectFromJson($request['filters']));
             }
 
             // order by
-            if (isset($request->toArray()['order_by'])) {
+            if (!is_null($request->get('order_by'))) {
                 $data = (new QueryHelper())->orderBy($data, (new RequestHelper())->getCollectFromJson($request['order_by']));
             }
 
@@ -558,10 +558,10 @@ abstract class BaseController extends Controller
 
     public function handlePermission(Request $request, $functionName, $params = [])
     {
-        if (!isset($request['permission_type'])) {
+        if (is_null($request->get('permission_type'))) {
             $request['permission_type'] = $this->DEFAULT_PERMISSION_TYPE;
         }
-        switch ($request['permission_type']) {
+        switch ($request->get('permission_type')) {
             case 'admin':
                 return $this->handleAdminPermission($request, $functionName, $params);
             case 'branch':
@@ -577,6 +577,7 @@ abstract class BaseController extends Controller
 
     public function handleAdminPermission(Request $request, $functionName, $params = [])
     {
+        return $request;
         switch ($functionName) {
             case 'index':
             case 'store':
