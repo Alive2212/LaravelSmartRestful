@@ -9,6 +9,7 @@ use Alive2212\LaravelSmartResponse\ResponseModel;
 use Alive2212\LaravelSmartResponse\SmartResponse\SmartResponse;
 use Alive2212\LaravelStringHelper\StringHelper;
 use App\Car;
+use App\Group;
 use App\Http\Controllers\Controller;
 use App\Location;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -17,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\Facades\Validator;
+use Mockery\Exception;
 
 
 abstract class BaseController extends Controller
@@ -34,6 +36,13 @@ abstract class BaseController extends Controller
      * @var string
      */
     protected $DEFAULT_PERMISSION_TYPE = 'admin';
+
+    /**
+     * permission types 'admin'|'branch'|'own'|'guest'
+     *
+     * @var string
+     */
+    protected $DEFAULT_GROUP_TITLE = null;
 
     /**
      * @var string
@@ -164,7 +173,7 @@ abstract class BaseController extends Controller
     public function index(Request $request)
     {
         // handle permission
-//        $request = $this->handlePermission($request, __FUNCTION__);
+        $request = $this->handlePermission(__FUNCTION__, $request);
 
         // create response model
         $response = new ResponseModel();
@@ -314,7 +323,7 @@ abstract class BaseController extends Controller
     public function store(Request $request)
     {
         // handle permission
-        $request = $this->handlePermission($request, __FUNCTION__);
+        $request = $this->handlePermission(__FUNCTION__, $request);
 
         // Create Response Model
         $response = new ResponseModel();
@@ -384,16 +393,27 @@ abstract class BaseController extends Controller
      */
     public function show($id)
     {
+        // handle permission
+        $filters = $this->handlePermission(__FUNCTION__);
+
         // Create Response Model
         $response = new ResponseModel();
 
         // try to get data
         try {
             $response->setMessage($this->getTrans('show', 'successful'));
-            $response->setData(collect($this->model->findOrFail($id)));
+
+            // add filter to get desired record
+            array_push($filters,
+                [$this->model->getKeyName(), '=', $id]
+            );
+            $data = $this->model
+                ->where($filters)
+                ->get();
+            $response->setData($data);
 
             // catch exception
-        } catch (ModelNotFoundException $exception) {
+        } catch (Exception $exception) {
             $response->setError($exception->getCode());
             $response->setMessage($this->getTrans('show', 'failed'));
             $response->setStatus(false);
@@ -412,15 +432,24 @@ abstract class BaseController extends Controller
      */
     public function edit($id)
     {
+        // handle permission
+        $filters = $this->handlePermission(__FUNCTION__);
+
         // Create Response Model
         $response = new ResponseModel();
 
         try {
             $response->setMessage($this->getTrans('edit', 'successful'));
-            $response->setData($this->model
-                ->where($this->model->getKeyName(), $id)
+
+            // add filter to get desired record
+            array_push($filters,
+                [$this->model->getKeyName(), '=', $id]
+            );
+            $data = $this->model
+                ->where($filters)
                 ->with(collect($this->editLoad)->count() == 0 ? $this->indexLoad : $this->editLoad)
-                ->get());
+                ->get();
+            $response->setData($data);
 
         } catch (ModelNotFoundException $exception) {
             $response->setError($exception->getCode());
@@ -444,14 +473,17 @@ abstract class BaseController extends Controller
      */
     public function update(Request $request, $id)
     {
-
+        // Handle permission
+        $request = $this->handlePermission(__FUNCTION__,$request);
+        $filters = $request['permission_filters'];
 
         // Create Response Model
         $response = new ResponseModel();
 
-        $modelFilter = [
-            [$this->model->getKeyName(), '=', $id],
-        ];
+        // Filters
+        array_push($filters,
+            [$this->model->getKeyName(), '=', $id]
+        );
 
         $validationErrors = $this->checkRequestValidation($request, $this->updateValidateArray);
         if ($validationErrors != null) {
@@ -474,22 +506,22 @@ abstract class BaseController extends Controller
                 }
             }
             //get result of update
-            $result = $this->model->findOrFail($id)->update($request->all());
+            $result = $this->model->where($filters)->firstOrFail()->update($request->all());
 
             // return response
             $response->setData($this->model
-                ->where($modelFilter)
+                ->where($filters)
                 ->with(collect($this->updateLoad)->count() == 0 ? $this->indexLoad : $this->updateLoad)
                 ->get());
             $response->setMessage(
-                $this->getTrans('update', 'successful1') .
+                $this->getTrans(__FUNCTION__, 'successful1') .
                 $result .
-                $this->getTrans('update', 'successful2')
+                $this->getTrans(__FUNCTION__, 'successful2')
             );
 
         } catch (ModelNotFoundException $exception) {
             $response->setStatus(false);
-            $response->setMessage($this->getTrans('update', 'model_not_found'));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'model_not_found'));
             $response->setError($exception->getCode());
             if (env('APP_DEBUG', false)) {
                 $response->setData(collect($exception->getMessage()));
@@ -497,7 +529,7 @@ abstract class BaseController extends Controller
 
         } catch (QueryException $exception) {
             $response->setStatus(false);
-            $response->setMessage($this->getTrans('update', 'failed'));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
             $response->setError($exception->getCode());
             if (env('APP_DEBUG', false)) {
                 $response->setData(collect($exception->getMessage()));
@@ -552,30 +584,32 @@ abstract class BaseController extends Controller
     public function setLocale()
     {
         if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
-            \App::setLocale($_SERVER['HTTP_ACCEPT_LANGUAGE']);
+            app('translator')->setLocale($_SERVER['HTTP_ACCEPT_LANGUAGE']);
         }
     }
 
-    public function handlePermission(Request $request, $functionName, $params = [])
+    public function handlePermission($functionName, Request $request = null, $params = [])
     {
-        if (is_null($request->get('permission_type'))) {
-            $request['permission_type'] = $this->DEFAULT_PERMISSION_TYPE;
+        if (!is_null($request)) {
+            if ($request->has('permission_type')) {
+                $this->DEFAULT_PERMISSION_TYPE = $request['permission_type'];
+            }
         }
-        switch ($request->get('permission_type')) {
+        switch ($this->DEFAULT_PERMISSION_TYPE) {
             case 'admin':
-                return $this->handleAdminPermission($request, $functionName, $params);
+                return $this->handleAdminPermission($functionName, $request, $params);
             case 'branch':
-                return $this->handleBranchPermission($request, $functionName, $params);
+                return $this->handleBranchPermission($functionName, $request, $params);
             case 'own':
-                return $this->handleOwnPermission($request, $functionName, $params);
+                return $this->handleOwnPermission($functionName, $request, $params);
             case 'guest':
-                return $this->handleGuestPermission($request, $functionName, $params);
+                return $this->handleGuestPermission($functionName, $request, $params);
             default:
                 return $params;
         }
     }
 
-    public function handleAdminPermission(Request $request, $functionName, $params = [])
+    public function handleAdminPermission($functionName, Request $request = null, $params = [])
     {
         return $request;
         switch ($functionName) {
@@ -591,7 +625,7 @@ abstract class BaseController extends Controller
         }
     }
 
-    public function handleBranchPermission(Request $request, $functionName, $params)
+    public function handleBranchPermission($functionName, Request $request = null, $params)
     {
         switch ($functionName) {
             case 'index':
@@ -606,7 +640,7 @@ abstract class BaseController extends Controller
         }
     }
 
-    public function handleOwnPermission(Request $request, $functionName, $params)
+    public function handleOwnPermission($functionName, Request $request = null, $params)
     {
         switch ($functionName) {
             case 'index':
@@ -615,59 +649,114 @@ abstract class BaseController extends Controller
                 } else {
                     $filters = [];
                 }
-                array_push($filters, [
-                    "key" => "owner_id",
-                    "operator" => "=",
-                    "value" => auth()->id(),
-                ]);
+                array_push($filters,
+                    [
+                        'key' => 'owner_id',
+                        'operator' => '=',
+                        'value' => auth()->id()
+                    ]
+                );
+                if (!is_null($this->DEFAULT_GROUP_TITLE)) {
+                    array_push($filters,
+                        [
+                            'key' => 'group.title',
+                            'operator' => '=',
+                            'value' => $this->DEFAULT_GROUP_TITLE
+                        ]
+                    );
+                }
                 $request['filters'] = json_encode($filters);
                 return $request;
             case 'store':
+                // check for group of user
+                if (!is_null($this->DEFAULT_GROUP_TITLE)) {
+                    // get group model
+                    $group = new Group();
+                    $group = $group->where('title', $this->DEFAULT_GROUP_TITLE)->first();
+                    $request['group_id'] = $group['id'];
+                }
+
                 $request['owner_id'] = auth()->id();
                 return $request;
+
             case 'show':
                 $filters = [];
-                array_push($filters, [
-                    "key" => "owner_id",
-                    "operator" => "=",
-                    "value" => auth()->id(),
-                ]);
-                $request['permission_filters'] = json_encode($filters);
-                return $request;
+                array_push($filters,
+                    ["owner_id", "=", auth()->id()]
+                );
+
+                // check for group of user
+                if (!is_null($this->DEFAULT_GROUP_TITLE)) {
+
+                    // get group model
+                    $group = new Group();
+                    $group = $group->where('title', $this->DEFAULT_GROUP_TITLE)->first();
+
+                    // put group_id filter
+                    array_push($filters,
+                        ['group_id', '=', $group['id']]);
+                }
+
+                return $filters;
             case 'edit':
                 $filters = [];
-                array_push($filters, [
-                    "key" => "owner_id",
-                    "operator" => "=",
-                    "value" => auth()->id(),
-                ]);
-                $request['permission_filters'] = json_encode($filters);
-                return $request;
+                array_push($filters,
+                    ["owner_id", "=", auth()->id()]
+                );
+
+                // check gor group of user
+                if (!is_null($this->DEFAULT_GROUP_TITLE)) {
+                    // get group model
+                    $group = new Group();
+                    $group = $group->where('title', $this->DEFAULT_GROUP_TITLE)->first();
+
+                    // put group_id filter
+                    array_push($filters,
+                        ['group_id', '=', $group['id']]);
+                }
+
+                return $filters;
             case 'create':
             case 'update':
+
                 $filters = [];
-                array_push($filters, [
-                    "key" => "owner_id",
-                    "operator" => "=",
-                    "value" => auth()->id(),
-                ]);
-                $request['permission_filters'] = json_encode($filters);
+                // put to filter
+                array_push($filters,
+                    ["owner_id", "=", auth()->id()]
+                );
+
+                // put to request
+                $request['owner_id'] = auth()->id();
+
+                // check for group of user
+                if (!is_null($this->DEFAULT_GROUP_TITLE)) {
+                    // get group model
+                    $group = new Group();
+                    $group = $group->where('title', $this->DEFAULT_GROUP_TITLE)->first();
+
+                    // put group_id filter
+                    array_push($filters,
+                        ['group_id', '=', $group['id']]);
+
+                    // put to request
+                    $request['group_id'] = $group['id'];
+                }
+
+                $request['permission_filters'] = $filters;
                 return $request;
             case 'destroy':
                 $filters = [];
-                array_push($filters, [
-                    "key" => "owner_id",
-                    "operator" => "=",
-                    "value" => auth()->id(),
-                ]);
-                $request['permission_filters'] = json_encode($filters);
-                return $request;
+                array_push($filters,
+                    ["owner_id", "=", auth()->id()],
+                    ["group_id", "=", $this->DEFAULT_GROUP_TITLE]
+                );
+                return $filters;
             default:
                 return $params;
         }
     }
 
-    public function handleGuestPermission(Request $request, $functionName, $params)
+    public function handleGuestPermission($functionName, Request $request = null, $params)
     {
         switch ($functionName) {
             case 'index':
