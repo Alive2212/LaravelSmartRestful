@@ -611,7 +611,7 @@ abstract class BaseController extends Controller
 
     public function handleAdminPermission($functionName, Request $request = null, $params = [])
     {
-        return $request;
+        return [];
         switch ($functionName) {
             case 'index':
             case 'store':
@@ -627,6 +627,7 @@ abstract class BaseController extends Controller
 
     public function handleBranchPermission($functionName, Request $request = null, $params)
     {
+        return [];
         switch ($functionName) {
             case 'index':
             case 'store':
@@ -758,6 +759,7 @@ abstract class BaseController extends Controller
 
     public function handleGuestPermission($functionName, Request $request = null, $params)
     {
+        return [];
         switch ($functionName) {
             case 'index':
             case 'store':
