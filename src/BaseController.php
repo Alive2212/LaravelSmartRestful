@@ -475,7 +475,11 @@ abstract class BaseController extends Controller
     {
         // Handle permission
         $request = $this->handlePermission(__FUNCTION__,$request);
-        $filters = $request['permission_filters'];
+        if ($request->has('permission_filters')){
+            $filters = $request['permission_filters'];
+        }else{
+            $filters = [];
+        }
 
         // Create Response Model
         $response = new ResponseModel();
