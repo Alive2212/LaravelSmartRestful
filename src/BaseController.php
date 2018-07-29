@@ -172,8 +172,8 @@ abstract class BaseController extends Controller
      */
     public function index(Request $request)
     {
-        // handle permission
-        $request = $this->handlePermission(__FUNCTION__, $request);
+//        // handle permission
+//        $request = $this->handlePermission(__FUNCTION__, $request);
 
         // create response model
         $response = new ResponseModel();
@@ -322,8 +322,8 @@ abstract class BaseController extends Controller
      */
     public function store(Request $request)
     {
-        // handle permission
-        $request = $this->handlePermission(__FUNCTION__, $request);
+//        // handle permission
+//        $request = $this->handlePermission(__FUNCTION__, $request);
 
         // Create Response Model
         $response = new ResponseModel();
@@ -393,8 +393,9 @@ abstract class BaseController extends Controller
      */
     public function show($id)
     {
-        // handle permission
-        $filters = $this->handlePermission(__FUNCTION__);
+        $filters = [];
+//        // handle permission
+//        $filters = $this->handlePermission(__FUNCTION__);
 
         // Create Response Model
         $response = new ResponseModel();
@@ -432,8 +433,9 @@ abstract class BaseController extends Controller
      */
     public function edit($id)
     {
-        // handle permission
-        $filters = $this->handlePermission(__FUNCTION__);
+        $filters = [];
+//        // handle permission
+//        $filters = $this->handlePermission(__FUNCTION__);
 
         // Create Response Model
         $response = new ResponseModel();
@@ -474,12 +476,12 @@ abstract class BaseController extends Controller
     public function update(Request $request, $id)
     {
         // Handle permission
-        $request = $this->handlePermission(__FUNCTION__,$request);
-        if ($request->has('permission_filters')){
-            $filters = $request['permission_filters'];
-        }else{
+//        $request = $this->handlePermission(__FUNCTION__,$request);
+//        if ($request->has('permission_filters')){
+//            $filters = $request['permission_filters'];
+//        }else{
             $filters = [];
-        }
+//        }
 
         // Create Response Model
         $response = new ResponseModel();
