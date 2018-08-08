@@ -581,7 +581,8 @@ abstract class BaseController extends Controller
      */
     public function getTrans($method, $status)
     {
-        return trans('laravel_smart_restful::' . $this->localPrefix . '.' . get_class($this->model) . '.' . $method . '.' . $status);
+        $className = array_last(explode('\\', get_class($this)));
+        return trans('laravel_smart_restful::' . $this->localPrefix . '.' . $className . '.' . $method . '.' . $status);
     }
 
     /**
