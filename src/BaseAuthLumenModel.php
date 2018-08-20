@@ -7,12 +7,12 @@ use Laravel\Lumen\Auth\Authorizable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 use Illuminate\Contracts\Auth\Access\Authorizable as AuthorizableContract;
+use Laravel\Passport\HasApiTokens;
 use Laravel\Scout\Searchable;
-use App\Resources\Reflection\LaravelReflectionHelper;
 
 class BaseAuthLumenModel extends Model implements AuthenticatableContract, AuthorizableContract
 {
-    use Authenticatable, Authorizable,Searchable;
+    use Authenticatable, Authorizable,Searchable,HasApiTokens;
 
     /**
      * default relations of method
@@ -90,40 +90,6 @@ class BaseAuthLumenModel extends Model implements AuthenticatableContract, Autho
             }
         }
         return $result->toArray();
-    }
-
-    /**
-     * get methods names of child class in array type
-     *
-     * @return array
-     */
-    public function getMethods()
-    {
-        return (new LaravelReflectionHelper())->getClassMethodsNames($this,\ReflectionMethod::IS_PUBLIC);
-    }
-
-    /**
-     * @return array
-     */
-    public function getRelatedMethods()
-    {
-        return (new LaravelReflectionHelper())->getClassRelationMethodsNames($this);
-    }
-
-    /**
-     * @return mixed
-     */
-    public function withRelation()
-    {
-        return $this->with($this->getRelatedMethods());
-    }
-
-    /**
-     * @return mixed
-     */
-    public function loadRelation()
-    {
-        return $this->load($this->getRelatedMethods());
     }
 
     /**
