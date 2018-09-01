@@ -2,21 +2,16 @@
 
 namespace Alive2212\LaravelSmartRestful;
 
-use Alive2212\ExcelHelper\ExcelHelper;
 use Alive2212\LaravelQueryHelper\QueryHelper;
 use Alive2212\LaravelRequestHelper\RequestHelper;
 use Alive2212\LaravelSmartResponse\ResponseModel;
 use Alive2212\LaravelSmartResponse\SmartResponse\SmartResponse;
 use Alive2212\LaravelStringHelper\StringHelper;
-use App\Car;
 use App\Group;
 use App\Http\Controllers\Controller;
-use App\Location;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\MessageBag;
 use Illuminate\Support\Facades\Validator;
 use Mockery\Exception;
 
@@ -237,10 +232,10 @@ abstract class BaseController extends Controller
 
             if (array_key_exists('file', $request->toArray())) {
                 //TODO add relation on top if here and create a tree flatter array in array helper
-                return (new ExcelHelper())->setOptions([
-                    'store_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
-                    'download_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
-                ])->table($data->get()->toArray())->createExcelFile()->download();
+                //return (new ExcelHelper())->setOptions([
+                //    'store_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
+                //    'download_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
+                //])->table($data->get()->toArray())->createExcelFile()->download();
             }
 
             // load relations
