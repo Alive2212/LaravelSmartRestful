@@ -45,6 +45,11 @@ abstract class BaseController extends Controller
     protected $groupTitle = null;
 
     /**
+     * @var null
+     */
+    protected $defaultLocaleClass = null;
+
+    /**
      * @var string
      */
     protected $localPrefix = 'controller';
@@ -581,8 +586,18 @@ abstract class BaseController extends Controller
      */
     public function getTrans($method, $status)
     {
-        $className = array_last(explode('\\', get_class($this)));
-        return trans('laravel_smart_restful::' . $this->localPrefix . '.' . $className . '.' . $method . '.' . $status);
+        if (is_null($this->defaultLocaleClass)) {
+            $className = array_last(explode('\\', get_class($this)));
+        } else {
+            $className = $this->defaultLocaleClass;
+        }
+        return trans(
+            'laravel_smart_restful::' .
+            $this->localPrefix . '.' .
+            ($className === '' ?'': ($className . '.')) .
+            $method . '.' .
+            $status
+        );
     }
 
     /**
