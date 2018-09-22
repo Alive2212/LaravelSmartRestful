@@ -2,6 +2,7 @@
 
 namespace Alive2212\LaravelSmartRestful;
 
+use Alive2212\LaravelOnionPattern\BasePattern;
 use Alive2212\LaravelQueryHelper\QueryHelper;
 use Alive2212\LaravelRequestHelper\RequestHelper;
 use Alive2212\LaravelSmartResponse\ResponseModel;
@@ -18,6 +19,8 @@ use Mockery\Exception;
 
 abstract class BaseController extends Controller
 {
+    use BasePattern;
+
     /**
      * to use this class
      * create message list as messages in message file
@@ -26,11 +29,16 @@ abstract class BaseController extends Controller
      */
 
     /**
+     * @var string
+     */
+    protected $shortTagName = 'smart_restful';
+
+    /**
      * permission types 'admin'|'branch'|'own'|'guest'
      *
      * @var string
      */
-    protected $permissionType = 'admin';
+    protected $defaultPermissionType = 'admin';
 
     /**
      * permission types 'admin'|'branch'|'own'|'guest'
@@ -147,6 +155,9 @@ abstract class BaseController extends Controller
         //
     ];
 
+    /**
+     * @var array
+     */
     protected $middlewareParams = [];
 
     /**
@@ -162,6 +173,9 @@ abstract class BaseController extends Controller
         $this->setLocale();
     }
 
+    /**
+     * @return mixed
+     */
     abstract public function initController();
 
     /**
@@ -173,7 +187,7 @@ abstract class BaseController extends Controller
     public function index(Request $request)
     {
         // handle permission
-        list($request,$filters) = $this->handlePermission(__FUNCTION__, $request);
+        list($request, $filters) = $this->handlePermission(__FUNCTION__, $request);
 
         // create response model
         $response = new ResponseModel();
@@ -589,7 +603,7 @@ abstract class BaseController extends Controller
         return trans(
             'laravel_smart_restful::' .
             $this->localPrefix . '.' .
-            ($className === '' ?'': ($className . '.')) .
+            ($className === '' ? '' : ($className . '.')) .
             $method . '.' .
             $status
         );
@@ -614,102 +628,67 @@ abstract class BaseController extends Controller
      */
     public function handlePermission($functionName, Request $request = null, $id = null, $params = [])
     {
+        // define filter
         $filters = null;
 
-        if (!is_null($request)) {
-            if ($request->has('permission_type')) {
-                $this->permissionType = $request['permission_type'];
-            }
-        }
+        // init permission
+        $request = $this->initPermissionTag($request);
 
+        // init method name with
         $methodName =
             'handle' .
             (new StringHelper())->upperFirstLetter($functionName) .
-            (new StringHelper())->upperFirstLetter($this->permissionType) .
+            (new StringHelper())->upperFirstLetter($this->defaultPermissionType) .
             'Permission';
 
+        // return response
         return $this->$methodName($request, $id);
     }
 
     /**
      * @param Request $request
      * @param $id
-     * @return array
+     * @return Request
      */
-    public function handleIndexAdminPermission(Request $request, $id)
+    public function handleIndexAdminPermission(Request $request, $id = null): Request
     {
-        return [$request, null];
+        return $request;
+    }
+
+    /**
+     * @param Request $request
+     * @param null $id
+     * @return Request
+     */
+    public function handleIndexBranchPermission(Request $request, $id = null): Request
+    {
+        $request = $this->getFilters($request);
+        $request = $this->putGroupFilter($request);
+        $request = $this->putJsonFilters($request);
+        return $request;
     }
 
     /**
      * @param Request $request
      * @param $id
-     * @return array
+     * @return Request
      */
-    public function handleIndexBranchPermission(Request $request, $id)
+    public function handleIndexOwnPermission(Request $request, $id = null): Request
     {
-        if (isset($request['filters'])) {
-            $filters = json_decode($request['filters'], true);
-        } else {
-            $filters = [];
-        }
-
-        $filters = $this->addFilter($filters, 'owner_id', '=', auth()->id());
-
-        if (!is_null($this->groupTitle)) {
-            $filters = $this->addFilter($filters, 'group.title', '=', $this->groupTitle);
-        }
-
-        $request['filters'] = json_encode($filters);
-        return [$request, $filters];
+        $request = $this->getFilters($request);
+        $request = $this->putOwnerFilter($request,auth()->id());
+        $request = $this->putGroupFilter($request);
+        $request = $this->putJsonFilters($request);
+        return $request;
     }
 
-    /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
-    public function handleIndexOwnPermission(Request $request, $id)
-    {
-        if (isset($request['filters'])) {
-            $filters = json_decode($request['filters'], true);
-        } else {
-            $filters = [];
-        }
-
-        $filters = $this->addFilter($filters, 'owner_id', '=', auth()->id());
-
-        if (!is_null($this->groupTitle)) {
-            $filters = $this->addFilter($filters, 'group.title', '=', $this->groupTitle);
-        }
-
-        $request['filters'] = json_encode($filters);
-
-        return [$request, $filters];
-    }
-
-    /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
     public function handleIndexGuestPermission(Request $request, $id)
     {
-        if (isset($request['filters'])) {
-            $filters = json_decode($request['filters'], true);
-        } else {
-            $filters = [];
-        }
-
-        $filters = $this->addFilter($filters, 'owner_id', '=', null);
-
-        if (!is_null($this->groupTitle)) {
-            $filters = $this->addFilter($filters, 'group.title', '=', null);
-        }
-
-        $request['filters'] = json_encode($filters);
-
-        return [$request, $filters];
+        $request = $this->getFilters($request);
+        $request = $this->putOwnerFilter($request);
+        $request = $this->putGroupFilter($request);
+        $request = $this->putJsonFilters($request);
+        return $request;
     }
 
     /**
@@ -778,14 +757,47 @@ abstract class BaseController extends Controller
         return [$request, null];
     }
 
-    public function handleShowAdminPermission(Request $request,$id)
+    /**
+     * @param Request $request
+     * @param $id
+     * @return array
+     */
+    public function handleShowAdminPermission(Request $request, $id)
     {
         $filters = [];
-
-        return [$request,$filters];
+        return [$request, $filters];
     }
 
-    public function handleShowBranchPermission(Request $request,$id)
+    /**
+     * @param Request $request
+     * @param $id
+     * @return array
+     */
+    public function handleShowBranchPermission(Request $request, $id)
+    {
+        $filters = [];
+        array_push($filters,
+            ["owner_id", "=", auth()->id()]
+        );
+        if (!is_null($this->groupTitle)) {
+
+            // get group model
+            $group = new Group();
+            $group = $group->where('title', $this->groupTitle)->first();
+
+            // put group_id filter
+            array_push($filters,
+                ['group_id', '=', $group['id']]);
+        }
+        return [$request, $filters];
+    }
+
+    /**
+     * @param Request $request
+     * @param $id
+     * @return array
+     */
+    public function handleShowOwnPermission(Request $request, $id)
     {
         $filters = [];
         array_push($filters,
@@ -804,10 +816,15 @@ abstract class BaseController extends Controller
                 ['group_id', '=', $group['id']]);
         }
 
-        return [$request,$filters];
+        return [$request, $filters];
     }
 
-    public function handleShowOwnPermission(Request $request,$id)
+    /**
+     * @param Request $request
+     * @param $id
+     * @return array
+     */
+    public function handleShowGuestPermission(Request $request, $id)
     {
         $filters = [];
         array_push($filters,
@@ -826,31 +843,37 @@ abstract class BaseController extends Controller
                 ['group_id', '=', $group['id']]);
         }
 
-        return [$request,$filters];
+        return [$request, $filters];
     }
 
-    public function handleShowGuestPermission(Request $request,$id)
+    public function handleEditAdminPermission(Request $request, $id)
     {
         $filters = [];
-        array_push($filters,
+        return [$request, $filters];
+    }
+
+    public function handleEditBranchPermission(Request $request, $id)
+    {
+        $filters = [];
+        array_push(
+            $filters,
             ["owner_id", "=", auth()->id()]
         );
-
-        // check for group of user
         if (!is_null($this->groupTitle)) {
-
-            // get group model
             $group = new Group();
             $group = $group->where('title', $this->groupTitle)->first();
-
-            // put group_id filter
             array_push($filters,
                 ['group_id', '=', $group['id']]);
         }
-
-        return [$request,$filters];
+        return [$request, $filters];
     }
 
+    /**
+     * @param $functionName
+     * @param Request|null $request
+     * @param $params
+     * @return array|Request
+     */
     public function handleOwnPermission($functionName, Request $request = null, $params)
     {
         switch ($functionName) {
@@ -915,60 +938,6 @@ abstract class BaseController extends Controller
         }
     }
 
-//    public function handleGuestPermission($functionName, Request $request = null, $params)
-//    {
-//        return [];
-//        switch ($functionName) {
-//            case 'index':
-//            case 'store':
-//            case 'show':
-//            case 'edit':
-//            case 'create':
-//            case 'update':
-//            case 'destroy':
-//            default:
-//                return $params;
-//        }
-//    }
-
-//    /**
-//     * @param $functionName
-//     * @param Request|null $request
-//     * @param array $params
-//     * @return array
-//     */
-//    public function handleAdminPermission($functionName, Request $request = null, $params = [])
-//    {
-//        return [];
-//        switch ($functionName) {
-//            case 'index':
-//            case 'store':
-//            case 'show':
-//            case 'edit':
-//            case 'create':
-//            case 'update':
-//            case 'destroy':
-//            default:
-//                return $params;
-//        }
-//    }
-
-//    public function handleBranchPermission($functionName, Request $request = null, $params)
-//    {
-//        return [];
-//        switch ($functionName) {
-//            case 'index':
-//            case 'store':
-//            case 'show':
-//            case 'edit':
-//            case 'create':
-//            case 'update':
-//            case 'destroy':
-//            default:
-//                return $params;
-//        }
-//    }
-
     /**
      * @param array $filters
      * @param $key
@@ -1013,5 +982,88 @@ abstract class BaseController extends Controller
     public function setLocalPrefix(string $localPrefix)
     {
         $this->localPrefix = $localPrefix;
+    }
+
+    /**
+     * @param Request $request
+     * @return Request
+     */
+    public function initPermissionTag(Request $request): Request
+    {
+        if (!is_null($request)) {
+            if ($request->has($this->getRequestTagName('permission_type'))) {
+                $this->defaultPermissionType = $request[$this->getRequestTagName('permission_type')];
+            }
+        }
+        return $request;
+    }
+
+    public function getRequestTagName($name): String
+    {
+        return $this->shortTagName . '_' . $name;
+    }
+
+    /**
+     * get filter if exist
+     *
+     * @param Request $request
+     * @return Request
+     */
+    public function getFilters(Request $request): Request
+    {
+        // check for exist filters in request and get filters
+        if (isset($request['filters'])) {
+            $filters = json_decode($request['filters'], true);
+        } else {
+            $filters = [];
+        }
+
+        $request[$this->getRequestTagName('filter')] = $filters;
+
+        return $request;
+    }
+
+    /**
+     * @param Request $request
+     * @return Request
+     */
+    public function putGroupFilter(Request $request): Request
+    {
+        if (!is_null($this->groupTitle)) {
+            $request[$this->getRequestTagName('filter')] = $this->addFilter(
+                $request[$this->getRequestTagName('filter')],
+                'group.title',
+                '=',
+                $this->groupTitle
+            );
+        }
+        return $request;
+    }
+
+    /**
+     * @param Request $request
+     * @param $userId
+     * @return Request
+     */
+    public function putOwnerFilter(Request $request,$userId = null): Request
+    {
+        $request[$this->getRequestTagName('filter')] =
+            $this->addFilter(
+                $request[$this->getRequestTagName('filter')],
+                'owner_id',
+                '=',
+                $userId
+            );
+        return $request;
+    }
+
+    /**
+     * @param Request $request
+     * @return Request
+     */
+    public function putJsonFilters(Request $request): Request
+    {
+        $request['filters'] = json_encode($request[$this->getRequestTagName('filter')]);
+        return $request;
     }
 }
