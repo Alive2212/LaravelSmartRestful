@@ -187,7 +187,7 @@ abstract class BaseController extends Controller
     public function index(Request $request)
     {
         // handle permission
-        list($request, $filters) = $this->handlePermission(__FUNCTION__, $request);
+//        list($request, $filters) = $this->handlePermission(__FUNCTION__, $request);
 
         // create response model
         $response = new ResponseModel();
