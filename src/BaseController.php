@@ -10,8 +10,10 @@ use Alive2212\LaravelSmartResponse\SmartResponse\SmartResponse;
 use Alive2212\LaravelStringHelper\StringHelper;
 use App\Group;
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Mockery\Exception;
@@ -19,14 +21,45 @@ use Mockery\Exception;
 
 abstract class BaseController extends Controller
 {
-    use BasePattern;
-
     /**
      * to use this class
      * create message list as messages in message file
      * override __constructor and define your model
      * define your rules for index,store and update
      */
+
+    /**
+     * base pattern
+     */
+    use BasePattern;
+
+    /**
+     * store tag to store data of request
+     *
+     * @var string
+     */
+    protected $cachedTag = 'response_cached';
+
+    /**
+     * store tag to store data of request
+     *
+     * @var string
+     */
+    protected $storeTag = 'response_store';
+
+    /**
+     * function name tag for pass data to response
+     *
+     * @var string
+     */
+    protected $functionNameResponseTag = 'response_function';
+
+    /**
+     * data tag for pass data to response
+     *
+     * @var string
+     */
+    protected $dataResponseTag = 'response_data';
 
     /**
      * @var string
@@ -1065,5 +1098,57 @@ abstract class BaseController extends Controller
     {
         $request['filters'] = json_encode($request[$this->getRequestTagName('filter')]);
         return $request;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getModel():Model
+    {
+        return $this->model;
+    }
+
+    /**
+     * @param Model $model
+     * @return $this
+     */
+    public function setModel(Model $model)
+    {
+        $this->model = $model;
+        return $this;
+    }
+
+    /**
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function successfulResponse(Request $request):JsonResponse
+    {
+        $response = new ResponseModel();
+        $response->setData(collect($request->all()));
+        $response->setMessage($this->getTrans(
+            $request->get($this->functionNameResponseTag),
+            'successful'
+        ));
+        return SmartResponse::response($response);
+    }
+
+    /**
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function failedResponse(Request $request):JsonResponse
+    {
+        $response = new ResponseModel();
+        $data = $request->get($this->dataResponseTag);
+        $response->setData(collect($data));
+        if (function_exists($data->getCode())) {
+            $response->setError($data->getCode());
+        }
+        $response->setMessage($this->getTrans(
+            $request->get($this->functionNameResponseTag),
+            'successful'
+        ));
+        return SmartResponse::response($response);
     }
 }
