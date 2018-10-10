@@ -1122,10 +1122,12 @@ abstract class BaseController extends Controller
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function successfulResponse(Request $request):JsonResponse
+    public function successfulResponse(Request $request): JsonResponse
     {
         $response = new ResponseModel();
-        $response->setData(collect($request->all()));
+        if (!is_null($request->get($this->dataResponseTag))) {
+            $response->setData(collect($request[$this->dataResponseTag]));
+        };
         $response->setMessage($this->getTrans(
             $request->get($this->functionNameResponseTag),
             'successful'
@@ -1137,18 +1139,27 @@ abstract class BaseController extends Controller
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function failedResponse(Request $request):JsonResponse
+    public function failedResponse(Request $request): JsonResponse
     {
         $response = new ResponseModel();
-        $data = $request->get($this->dataResponseTag);
-        $response->setData(collect($data));
-        if (function_exists($data->getCode())) {
-            $response->setError($data->getCode());
-        }
+        if (!is_null($request->get($this->dataResponseTag))) {
+            $data = $request->get($this->dataResponseTag);
+            if (method_exists($data, 'getCode')) {
+                $response->setError($data->getCode());
+            }
+            if (method_exists($data, 'getResponse')) {
+                $response->setData(collect(json_decode(
+                    $data->getResponse()
+                        ->getBody()
+                        ->getContents()
+                )));
+            }
+        };
         $response->setMessage($this->getTrans(
             $request->get($this->functionNameResponseTag),
-            'successful'
+            'failed'
         ));
         return SmartResponse::response($response);
     }
+
 }
