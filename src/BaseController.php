@@ -1142,6 +1142,21 @@ abstract class BaseController extends Controller
     public function failedResponse(Request $request): JsonResponse
     {
         $response = new ResponseModel();
+        $response->setStatus(false);
+        $this->setResponseData($request, $response);
+        $response->setMessage($this->getTrans(
+            $request->get($this->functionNameResponseTag),
+            'failed'
+        ));
+        return SmartResponse::response($response);
+    }
+
+    /**
+     * @param Request $request
+     * @param $response
+     */
+    public function setResponseData(Request $request, $response)
+    {
         if (!is_null($request->get($this->dataResponseTag))) {
             $data = $request->get($this->dataResponseTag);
             if (method_exists($data, 'getCode')) {
@@ -1155,11 +1170,5 @@ abstract class BaseController extends Controller
                 )));
             }
         };
-        $response->setMessage($this->getTrans(
-            $request->get($this->functionNameResponseTag),
-            'failed'
-        ));
-        return SmartResponse::response($response);
     }
-
 }
