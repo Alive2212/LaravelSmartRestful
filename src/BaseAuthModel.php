@@ -13,7 +13,7 @@ use Phoenix\EloquentMeta\MetaTrait;
 
 class BaseAuthModel extends Authenticatable
 {
-    use Searchable, PivotEventTrait,Notifiable, HasApiTokens, MetaTrait;
+    use Searchable, Notifiable, HasApiTokens;
 
     /**
      * default relations of method
