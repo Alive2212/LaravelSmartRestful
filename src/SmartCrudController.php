@@ -5,22 +5,21 @@ namespace Alive2212\LaravelSmartRestful;
 use Alive2212\LaravelOnionPattern\BasePattern;
 use Alive2212\LaravelQueryHelper\QueryHelper;
 use Alive2212\LaravelRequestHelper\RequestHelper;
+use Alive2212\LaravelStringHelper\StringHelper;
+use App\Http\Controllers\Controller;
 use Alive2212\LaravelSmartResponse\ResponseModel;
 use Alive2212\LaravelSmartResponse\SmartResponse;
-use Alive2212\LaravelStringHelper\StringHelper;
-use App\Group;
-use App\Http\Controllers\Controller;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
-use Mockery\Exception;
 
 
-abstract class BaseController extends Controller
+abstract class SmartCrudController extends Controller
 {
     /**
      * to use this class
@@ -140,7 +139,7 @@ abstract class BaseController extends Controller
      *
      * @var array
      */
-    protected $indexLoad = [
+    protected $indexRelations = [
         //
     ];
 
@@ -149,7 +148,7 @@ abstract class BaseController extends Controller
      *
      * @var array
      */
-    protected $editLoad = [
+    protected $showRelations = [
         //
     ];
 
@@ -195,6 +194,17 @@ abstract class BaseController extends Controller
     protected $middlewareParams = [];
 
     /**
+     * @var array
+     */
+    protected $storeOrUpdateFields = [];
+
+    /**
+     * this variable for create and assigned to model when put in request in Store & Update method
+     * @var array
+     */
+    protected $associates = [];
+
+    /**
      * defaultController constructor.
      */
     public function __construct()
@@ -207,9 +217,18 @@ abstract class BaseController extends Controller
     }
 
     /**
-     * @return mixed
+     * @return void
      */
     abstract public function initController();
+
+    /**
+     * @param string $functionName
+     * @param ResponseModel $responseModel
+     * @param Request $request
+     */
+    public function beforeResponse(string $functionName, ResponseModel $responseModel,Request $request)
+    {
+    }
 
     /**
      * Display a listing of the resource.
@@ -225,48 +244,25 @@ abstract class BaseController extends Controller
         // create response model
         $response = new ResponseModel();
 
-        $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
-
-        $pageNumber = 1;
-
-        //set default pagination
-
-        //set page size
-        if (!isset($request->toArray()['page']['size'])) {
-            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
-        } elseif (($request->get('page')['size']) == 0) {
-            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
-        } else {
-            $pageSize = $request->get('page')['size'];
-        }
-
-        //set page number
-        if (!isset($request->get('page')['number'])) {
-            $pageNumber = $this->DEFAULT_PAGE_NUMBER;
-        } elseif (($request->get('page')['number']) == 0) {
-            $pageNumber = $this->DEFAULT_PAGE_NUMBER;
-        } else {
-            $pageNumber = $request->get('page')['number'];
-        }
-        $request['page'] = $pageNumber;
-
+        // Get Page Size
+        $pageSize = $this->getPageSize($request);
+        $request['page_size'] = $pageSize;
 
         //set default ordering
-        if (isset($request->toArray()['order_by'])) {
-            if (is_null($request['order_by'])) {
-                $request['order_by'] = "{\"field\":\"id\",\"operator\":\"Desc\"}";
-            }
-        }
+        $orderBy = $this->getOrderBy($request);
+        $request['order_by'] = $orderBy;
 
         $validationErrors = $this->checkRequestValidation($request, $this->indexValidateArray);
         if ($validationErrors != null) {
             if (env('APP_DEBUG', false)) {
                 $response->setData(collect($validationErrors->toArray()));
             }
+            $response->setStatusCode(422);
             $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
-            $response->setStatusCode(401);
+            $response->setError($validationErrors->toArray());
             return SmartResponse::response($response);
         }
+
 
         try {
             $data = $request->get('query') != null ?
@@ -283,15 +279,13 @@ abstract class BaseController extends Controller
                 //    'download_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
                 //])->table($data->get()->toArray())->createExcelFile()->download();
             }
-
             // load relations
-            if (count($this->indexLoad) > 0) {
-                $data = $data->with($this->indexLoad);
-            }
+            $relations = $this->getRequestRelations($request);
+            $data = $this->addRelationToData($data, $this->getArrayWithPriority($this->indexRelations, $relations));
 
             // filters by
             if (!is_null($request->get('filters'))) {
-                $data = (new QueryHelper())->deepFilter($data, (new RequestHelper())->getCollectFromJson($request['filters']));
+                $data = (new QueryHelper())->smartDeepFilter($data, (new RequestHelper())->getCollectFromJson($request['filters'])->toArray());
             }
 
             // order by
@@ -299,23 +293,25 @@ abstract class BaseController extends Controller
                 $data = (new QueryHelper())->orderBy($data, (new RequestHelper())->getCollectFromJson($request['order_by']));
             }
 
+
             // return response
             $response->setData(collect($data->paginate($pageSize)));
-            $response->setMessage($this->getTrans('index', 'successful'));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
             return SmartResponse::response($response);
 
         } catch (QueryException $exception) {
 
             // return response
             $response->setData(collect($exception->getMessage()));
-            $response->setError($exception->getCode());
-            $response->setMessage($this->getTrans('index', 'failed'));
+            $response->setError(['query_exception' => $exception->getMessage()]);
+            $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
             return SmartResponse::response($response);
         }
     }
 
     public function checkRequestValidation(Request $request, $validationArray)
     {
+
         $requestParams = $request->toArray();
         $validator = Validator::make($request->all(), $validationArray);
         if ($validator->fails()) {
@@ -346,7 +342,7 @@ abstract class BaseController extends Controller
     /**
      * Show the form for creating a new resource.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function create()
     {
@@ -360,13 +356,23 @@ abstract class BaseController extends Controller
     }
 
     /**
+     * @param Request $request
+     * @return Request
+     */
+    public function storeAfterValidation(Request $request): Request
+    {
+        return $request;
+    }
+
+    /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @param Request $request
+     * @return JsonResponse
      */
     public function store(Request $request)
     {
+//        dd($request->file());
 //        // handle permission
 //        $request = $this->handlePermission(__FUNCTION__, $request);
 
@@ -374,7 +380,7 @@ abstract class BaseController extends Controller
         $response = new ResponseModel();
 
         if (!isset($userId)) {
-            $userId = 1;
+            $userId = Auth::id();
         }
 
         //add author id into the request if doesn't exist
@@ -390,50 +396,77 @@ abstract class BaseController extends Controller
         $validationErrors = $this->checkRequestValidation($request, $this->storeValidateArray);
 
         if ($validationErrors != null) {
-            if (env('APP_DEBUG', false)) {
-                $response->setData(collect($validationErrors->toArray()));
-            }
+            $response->setStatusCode(422);
             $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
-            $response->setError(99);
+            $response->setError($validationErrors->toArray());
             return SmartResponse::response($response);
 
         }
+//        dd($request);
+
+        $request = $this->storeAfterValidation($request);
 
         try {
             // get result of model creation
-            $result = $this->model->create($request->all());
+//            $modelObject = new $this->model
+            if (count($this->storeOrUpdateFields)) {
+                $whereCondition = [];
+                foreach ($this->storeOrUpdateFields as $storeOrUpdateField) {
+                    array_push($whereCondition, [$storeOrUpdateField, $request->$storeOrUpdateField]);
+                }
+                $result = $this->model->updateOrCreate($whereCondition, $request->toArray());
+            } else {
+                $result = new $this->model($request->all());
+                // Create Associates
+                foreach ($this->associates as $associateKey => $associateModel) {
+                    if ($request->has($associateKey)) {
+                        if (in_array($associateKey . '_id', $this->model->getFillable())) {
+                            $associateObject = new $associateModel(json_decode($request->get($associateKey), true));
+                            $associateObject->save();
+                            $result->$associateKey()->associate($associateObject);
+                        }
+                    }
+                }
+                $result->save();
+            }
+
+
+            //            $result = $this->model->create($request->all());
             // sync many to many relation
             foreach ($this->pivotFields as $pivotField) {
                 if (collect($request[$pivotField])->count()) {
                     $pivotField = (new StringHelper())->toCamel($pivotField);
-                    $this->model->find($result['id'])->$pivotField()->sync(json_decode($request[$pivotField]));
+                    $this->model->find($result[$this->model->getKeyName()])->$pivotField()->sync(json_decode($request[$pivotField]));
                 }
             }
-            $response->setMessage($this->getTrans('store', 'successful'));
-
+            $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
 
             $response->setData($this->model
-                ->where($this->model->getKeyName(), $result['id'])
-                ->with(collect($this->updateLoad)->count() == 0 ? $this->indexLoad : $this->updateLoad)
+                ->where($this->model->getKeyName(), $result[$this->model->getKeyName()])
+                ->with(collect($this->updateLoad)->count() == 0 ? $this->indexRelations : $this->updateLoad)
                 ->get());
 
+            $response->setStatusCode(201);
+
         } catch (QueryException $exception) {
-            $response->setError($exception->getCode());
-            $response->setMessage($this->getTrans('store', 'failed'));
-            if (env('APP_DEBUG', false)) {
-                $response->setData(collect($exception->getMessage()));
-            }
+            $response->setError(['query_exception' => $exception->getMessage()]);
+            $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
         }
+
+        // assign something before response
+        $this->beforeResponse(__FUNCTION__, $response, $request);
+
         return SmartResponse::response($response);
     }
 
     /**
      * Display the specdefaultied resource.
      *
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $filters = [];
 //        // handle permission
@@ -442,35 +475,46 @@ abstract class BaseController extends Controller
         // Create Response Model
         $response = new ResponseModel();
 
-        // try to get data
         try {
-            $response->setMessage($this->getTrans('show', 'successful'));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
 
             // add filter to get desired record
             array_push($filters,
                 [$this->model->getKeyName(), '=', $id]
             );
+
+            // load relations
+            $relations = $this->getRequestRelations($request);
+            $relations = $this->getArrayWithPriority($this->showRelations, $this->indexRelations, $relations);
             $data = $this->model
                 ->where($filters)
+                ->with($relations)
                 ->get();
             $response->setData($data);
 
-            // catch exception
-        } catch (Exception $exception) {
+        } catch (ModelNotFoundException $exception) {
             $response->setError($exception->getCode());
-            $response->setMessage($this->getTrans('show', 'failed'));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
             if (env('APP_DEBUG', false)) {
                 $response->setData(collect($exception->getMessage()));
             }
+
         }
+
+        if ($response->getData()->count() == 0) {
+            $response->setStatusCode(404);
+            $response->setError(['model_not_found_exception' => 'model not found']);
+            $response->setMessage($this->getTrans(__FUNCTION__, 'not_found'));
+        }
+
         return SmartResponse::response($response);
     }
 
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @param int $id
+     * @return JsonResponse
      */
     public function edit($id)
     {
@@ -482,7 +526,7 @@ abstract class BaseController extends Controller
         $response = new ResponseModel();
 
         try {
-            $response->setMessage($this->getTrans('edit', 'successful'));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
 
             // add filter to get desired record
             array_push($filters,
@@ -490,13 +534,13 @@ abstract class BaseController extends Controller
             );
             $data = $this->model
                 ->where($filters)
-                ->with(collect($this->editLoad)->count() == 0 ? $this->indexLoad : $this->editLoad)
+                ->with(collect($this->showRelations)->count() == 0 ? $this->indexRelations : $this->showRelations)
                 ->get();
             $response->setData($data);
 
         } catch (ModelNotFoundException $exception) {
             $response->setError($exception->getCode());
-            $response->setMessage($this->getTrans('edit', 'failed'));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
             if (env('APP_DEBUG', false)) {
                 $response->setData(collect($exception->getMessage()));
             }
@@ -509,9 +553,9 @@ abstract class BaseController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request $request
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
      */
     public function update(Request $request, $id)
     {
@@ -531,32 +575,39 @@ abstract class BaseController extends Controller
             [$this->model->getKeyName(), '=', $id]
         );
 
-        $validationErrors = $this->checkRequestValidation($request, $this->updateValidateArray);
+        $validateParams = $this->getArrayWithPriority($this->updateValidateArray, $this->storeValidateArray);
+        $validationErrors = $this->checkRequestValidation($request, $validateParams);
         if ($validationErrors != null) {
-            if (env('APP_DEBUG', false)) {
-                $response->setData(collect($validationErrors->toArray()));
-            }
+            $response->setStatusCode(422);
             $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
-            $response->setError(99);
+            $response->setError($validationErrors->toArray());
             return SmartResponse::response($response);
-
         }
 
         try {
             // sync many to many relation
+//            foreach ($this->pivotFields as $pivotField) {
+//                if (collect($request[$pivotField])->count()) {
+//                    $pivotMethod = (new StringHelper())->toCamel($pivotField);
+//                    dd($this->model->findOrFail($id)->tags()->detach());
+//                    $this->model->findOrFail($id)->$pivotMethod()->sync(json_decode($request[$pivotField], true));
+//                }
+//            }
             foreach ($this->pivotFields as $pivotField) {
                 if (collect($request[$pivotField])->count()) {
-                    $pivotMethod = (new StringHelper())->toCamel($pivotField);
-                    $this->model->findOrFail($id)->$pivotMethod()->sync(json_decode($request[$pivotField], true));
+                    $pivotField = (new StringHelper())->toCamel($pivotField);
+                    $this->model->find($id)->$pivotField()->sync(json_decode($request[$pivotField]));
                 }
             }
+
+
             //get result of update
             $result = $this->model->where($filters)->firstOrFail()->update($request->all());
 
             // return response
             $response->setData($this->model
                 ->where($filters)
-                ->with(collect($this->updateLoad)->count() == 0 ? $this->indexLoad : $this->updateLoad)
+                ->with(collect($this->updateLoad)->count() == 0 ? $this->indexRelations : $this->updateLoad)
                 ->get());
             $response->setMessage(
                 $this->getTrans(__FUNCTION__, 'successful1') .
@@ -565,19 +616,16 @@ abstract class BaseController extends Controller
             );
 
         } catch (ModelNotFoundException $exception) {
+            $response->setStatusCode(404);
             $response->setMessage($this->getTrans(__FUNCTION__, 'model_not_found'));
-            $response->setError($exception->getCode());
+            $response->setError(['model_not_found_exception' => $exception->getMessage()]);
             if (env('APP_DEBUG', false)) {
                 $response->setData(collect($exception->getMessage()));
             }
 
         } catch (QueryException $exception) {
             $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
-            $response->setError($exception->getCode());
-            if (env('APP_DEBUG', false)) {
-                $response->setData(collect($exception->getMessage()));
-            }
-
+            $response->setError(['query_exception' => $exception->getMessage()]);
         }
 
         return SmartResponse::response($response);
@@ -586,8 +634,8 @@ abstract class BaseController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @param int $id
+     * @return JsonResponse
      */
     public function destroy($id)
     {
@@ -595,16 +643,14 @@ abstract class BaseController extends Controller
         $response = new ResponseModel();
 
         try {
-            $response->setData(collect($this->model->findOrFail($id)->delete()));
-            $response->setMessage($this->getTrans('destroy', 'successful'));
+            $response->setData(collect(['row_affected' => (int)$this->model->findOrFail($id)->delete()]));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
 
         } catch (ModelNotFoundException $exception) {
-            $response->setMessage($this->getTrans('destroy', 'successful'));
-            $response->setError($exception->getCode());
-            if (env('APP_DEBUG', false)) {
-                $response->setData(collect($exception->getMessage()));
-            }
-
+            $response->setData(collect([]));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'not_found'));
+            $response->setStatusCode(404);
+            $response->setError(['model_not_found' => $exception->getMessage()]);
         }
 
         return SmartResponse::response($response);
@@ -698,7 +744,7 @@ abstract class BaseController extends Controller
     public function handleIndexOwnPermission(Request $request, $id = null): Request
     {
         $request = $this->getFilters($request);
-        $request = $this->putOwnerFilter($request,auth()->id());
+        $request = $this->putOwnerFilter($request, auth()->id());
         $request = $this->putGroupFilter($request);
         $request = $this->putJsonFilters($request);
         return $request;
@@ -1067,7 +1113,7 @@ abstract class BaseController extends Controller
      * @param $userId
      * @return Request
      */
-    public function putOwnerFilter(Request $request,$userId = null): Request
+    public function putOwnerFilter(Request $request, $userId = null): Request
     {
         $request[$this->getRequestTagName('filter')] =
             $this->addFilter(
@@ -1092,7 +1138,7 @@ abstract class BaseController extends Controller
     /**
      * @return mixed
      */
-    public function getModel():Model
+    public function getModel(): Model
     {
         return $this->model;
     }
@@ -1109,7 +1155,7 @@ abstract class BaseController extends Controller
 
     /**
      * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function successfulResponse(Request $request): JsonResponse
     {
@@ -1126,12 +1172,11 @@ abstract class BaseController extends Controller
 
     /**
      * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function failedResponse(Request $request): JsonResponse
     {
         $response = new ResponseModel();
-        $response->setStatus(false);
         $this->setResponseData($request, $response);
         $response->setMessage($this->getTrans(
             $request->get($this->functionNameResponseTag),
@@ -1159,5 +1204,78 @@ abstract class BaseController extends Controller
                 )));
             }
         };
+    }
+
+    /**
+     * @param Request $request
+     * @return int
+     */
+    public function getPageSize(Request $request): int
+    {
+//set page size
+        if (isset($request['page_size'])) {
+            return $request['page_size'];
+        }else{
+            return $this->DEFAULT_RESULT_PER_PAGE;
+        }
+
+//        if (!isset($request->toArray()['page']['size'])) {
+//            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
+//        } elseif (($request->get('page')['size']) == 0) {
+//            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
+//        } else {
+//            $pageSize = $request->get('page')['size'];
+//        }
+//        return $pageSize;
+    }
+
+    /**
+     * @param Request $request
+     * @return mixed|string
+     */
+    public function getOrderBy(Request $request)
+    {
+        $orderBy = $request->get('order_by');
+        if (is_null($orderBy) || $orderBy == "") {
+            $orderBy = "[\"" . $this->model->getKeyName() . "\",\"DESC\"]";
+        }
+//        dd($orderBy);
+        return $orderBy;
+    }
+
+    /**
+     * @param Request $request
+     * @param array $default
+     * @return array|mixed
+     */
+    public function getRequestRelations(Request $request, array $default = [])
+    {
+        $requestRelations = $request->get('relations');
+        if (is_null($requestRelations) || $requestRelations == "") {
+            $relations = $default;
+        } else {
+            $relations = json_decode($requestRelations);
+        }
+        return $relations;
+    }
+
+    /**
+     * @param $data
+     * @param array $relations
+     * @return mixed
+     */
+    public function addRelationToData($data, array $relations)
+    {
+        return $data->with($relations);
+    }
+
+    public function getArrayWithPriority(array ...$arrays)
+    {
+        foreach ($arrays as $array) {
+            if (count($array)) {
+                return $array;
+            }
+        }
+        return [];
     }
 }

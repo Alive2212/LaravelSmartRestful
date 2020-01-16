@@ -19,9 +19,9 @@
     "require": {
         "php": "~5.6|~7.0",
         "alive2212/laravel-onion-pattern": "^1.0",
-        "alive2212/laravel-smart-response": "^1.0",
+        "alive2212/laravel-smart-response": "^2.0",
         "alive2212/laravel-excel-helper": "^1.0",
-        "alive2212/laravel-query-helper": "^1.0",
+        "alive2212/laravel-query-helper": "^2.0",
         "alive2212/laravel-request-helper": "^1.0",
         "alive2212/laravel-string-helper": "^1.0",
         "alive2212/laravel-reflection-helper": "^1.0",
