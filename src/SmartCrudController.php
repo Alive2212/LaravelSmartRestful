@@ -225,9 +225,11 @@ abstract class SmartCrudController extends Controller
      * @param string $functionName
      * @param ResponseModel $responseModel
      * @param Request $request
+     * @return ResponseModel
      */
     public function beforeResponse(string $functionName, ResponseModel $responseModel,Request $request)
     {
+        return $responseModel;
     }
 
     /**
@@ -454,7 +456,7 @@ abstract class SmartCrudController extends Controller
         }
 
         // assign something before response
-        $this->beforeResponse(__FUNCTION__, $response, $request);
+        $response = $this->beforeResponse(__FUNCTION__, $response, $request);
 
         return SmartResponse::response($response);
     }
