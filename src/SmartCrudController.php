@@ -227,7 +227,7 @@ abstract class SmartCrudController extends Controller
      * @param Request $request
      * @return ResponseModel
      */
-    public function beforeResponse(string $functionName, ResponseModel $responseModel,Request $request)
+    public function beforeResponse(string $functionName, ResponseModel $responseModel, Request $request)
     {
         return $responseModel;
     }
@@ -374,6 +374,7 @@ abstract class SmartCrudController extends Controller
      */
     public function store(Request $request)
     {
+
 //        dd($request->file());
 //        // handle permission
 //        $request = $this->handlePermission(__FUNCTION__, $request);
@@ -404,9 +405,16 @@ abstract class SmartCrudController extends Controller
             return SmartResponse::response($response);
 
         }
-//        dd($request);
 
         $request = $this->storeAfterValidation($request);
+
+
+        // init reuqest for multiple model key
+        if (is_array($this->model->getKeyName())) {
+            foreach ($this->model->getKeyName() as $keyName) {
+                $request->request->set($keyName, $request->$keyName);
+            }
+        }
 
         try {
             // get result of model creation
@@ -432,20 +440,34 @@ abstract class SmartCrudController extends Controller
                 $result->save();
             }
 
+            // init for multi key models
+            $afterModelSavedFilter = [];
+            if (is_array($this->model->getKeyName())) {
+                foreach ($this->model->getKeyName() as $keyName) {
+                    array_push($afterModelSavedFilter, [
+                        $keyName, '=', $result[$keyName],
+                    ]);
+                }
+            } else {
+                array_push($afterModelSavedFilter, [
+                    $this->model->getKeyName(), '=', $result[$this->model->getKeyName()]
+                ]);
+            }
 
-            //            $result = $this->model->create($request->all());
             // sync many to many relation
             foreach ($this->pivotFields as $pivotField) {
                 if (collect($request[$pivotField])->count()) {
                     $pivotField = (new StringHelper())->toCamel($pivotField);
-                    $this->model->find($result[$this->model->getKeyName()])->$pivotField()->sync(json_decode($request[$pivotField]));
+                    $this->model->where($afterModelSavedFilter)->first()->$pivotField()->sync(json_decode($request[$pivotField]));
                 }
             }
             $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
 
+            $relations = $this->getRequestRelations($request);
+            $relations = $this->getArrayWithPriority($this->updateLoad, $this->indexRelations, $relations);
             $response->setData($this->model
-                ->where($this->model->getKeyName(), $result[$this->model->getKeyName()])
-                ->with(collect($this->updateLoad)->count() == 0 ? $this->indexRelations : $this->updateLoad)
+                ->where($afterModelSavedFilter)
+                ->with($relations)
                 ->get());
 
             $response->setStatusCode(201);
@@ -453,6 +475,8 @@ abstract class SmartCrudController extends Controller
         } catch (QueryException $exception) {
             $response->setError(['query_exception' => $exception->getMessage()]);
             $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
+            $response->setStatusCode(409);
+            return SmartResponse::response($response);
         }
 
         // assign something before response
@@ -468,7 +492,7 @@ abstract class SmartCrudController extends Controller
      * @param int $id
      * @return JsonResponse
      */
-    public function show(Request $request, $id)
+    public function show(Request $request)
     {
         $filters = [];
 //        // handle permission
@@ -481,9 +505,18 @@ abstract class SmartCrudController extends Controller
             $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
 
             // add filter to get desired record
-            array_push($filters,
-                [$this->model->getKeyName(), '=', $id]
-            );
+            if (is_array($this->model->getKeyName())) {
+                foreach ($this->model->getKeyName() as $keyName) {
+                    array_push($filters,
+                        [$keyName, '=', $request->$keyName]
+                    );
+                }
+            }else{
+                $keyName = $this->model->getKeyName();
+                array_push($filters,
+                    [$keyName, '=', $request->$keyName]
+                );
+            }
 
             // load relations
             $relations = $this->getRequestRelations($request);
@@ -1217,7 +1250,7 @@ abstract class SmartCrudController extends Controller
 //set page size
         if (isset($request['page_size'])) {
             return $request['page_size'];
-        }else{
+        } else {
             return $this->DEFAULT_RESULT_PER_PAGE;
         }
 
@@ -1239,7 +1272,12 @@ abstract class SmartCrudController extends Controller
     {
         $orderBy = $request->get('order_by');
         if (is_null($orderBy) || $orderBy == "") {
-            $orderBy = "[\"" . $this->model->getKeyName() . "\",\"DESC\"]";
+            if (is_array($this->model->getKeyName())) {
+//                dd($this->model->getKeyName()[0]);
+                $orderBy = "[\"" . $this->model->getKeyName()[0] . "\",\"DESC\"]";
+            } else {
+                $orderBy = "[\"" . $this->model->getKeyName() . "\",\"DESC\"]";
+            }
         }
 //        dd($orderBy);
         return $orderBy;
