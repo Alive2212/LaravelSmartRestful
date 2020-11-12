@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 
 abstract class SmartCrudController extends Controller
@@ -511,10 +512,13 @@ abstract class SmartCrudController extends Controller
                         [$keyName, '=', $request->$keyName]
                     );
                 }
-            }else{
+            } else {
+
+                $queryStringKey = Str::singular(strtolower($this->model->getTable()));
+                $index = $request->$queryStringKey;
                 $keyName = $this->model->getKeyName();
                 array_push($filters,
-                    [$keyName, '=', $request->$keyName]
+                    [$keyName, '=', $index]
                 );
             }
 
