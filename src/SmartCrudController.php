@@ -513,7 +513,6 @@ abstract class SmartCrudController extends Controller
                     );
                 }
             } else {
-
                 $queryStringKey = Str::singular(strtolower($this->model->getTable()));
                 $index = $request->$queryStringKey;
                 $keyName = $this->model->getKeyName();
