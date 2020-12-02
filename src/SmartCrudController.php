@@ -9,14 +9,17 @@ use Alive2212\LaravelStringHelper\StringHelper;
 use App\Http\Controllers\Controller;
 use Alive2212\LaravelSmartResponse\ResponseModel;
 use Alive2212\LaravelSmartResponse\SmartResponse;
+use http\Message;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\MessageBag;
 use Illuminate\Support\Str;
 
 
@@ -206,6 +209,12 @@ abstract class SmartCrudController extends Controller
     protected $associates = [];
 
     /**
+     * This variable for model key on query string id
+     * @var null
+     */
+    protected $modelKey = null;
+
+    /**
      * defaultController constructor.
      */
     public function __construct()
@@ -228,7 +237,7 @@ abstract class SmartCrudController extends Controller
      * @param Request $request
      * @return ResponseModel
      */
-    public function beforeResponse(string $functionName, ResponseModel $responseModel, Request $request)
+    public function beforeResponse(string $functionName, ResponseModel $responseModel, Request $request): ResponseModel
     {
         return $responseModel;
     }
@@ -237,9 +246,9 @@ abstract class SmartCrudController extends Controller
      * Display a listing of the resource.
      *
      * @param Request $request
-     * @return string
+     * @return JsonResponse
      */
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         // handle permission
 //        list($request, $filters) = $this->handlePermission(__FUNCTION__, $request);
@@ -300,7 +309,6 @@ abstract class SmartCrudController extends Controller
             // return response
             $response->setData(collect($data->paginate($pageSize)));
             $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
-            return SmartResponse::response($response);
 
         } catch (QueryException $exception) {
 
@@ -308,11 +316,16 @@ abstract class SmartCrudController extends Controller
             $response->setData(collect($exception->getMessage()));
             $response->setError(['query_exception' => $exception->getMessage()]);
             $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
-            return SmartResponse::response($response);
         }
+        return SmartResponse::response($response);
     }
 
-    public function checkRequestValidation(Request $request, $validationArray)
+    /**
+     * @param Request $request
+     * @param $validationArray
+     * @return \Illuminate\Support\MessageBag|null
+     */
+    public function checkRequestValidation(Request $request, $validationArray): ?MessageBag
     {
 
         $requestParams = $request->toArray();
@@ -324,30 +337,11 @@ abstract class SmartCrudController extends Controller
     }
 
     /**
-     * @param $status
-     * @return mixed
-     */
-    public function message($status)
-    {
-        $key = $this->messagePrefix . $this->modelName . '.' . debug_backtrace()[1]['function'] . '.' . $status;
-        return $this->getMessageFromFile($key);
-    }
-
-    /**
-     * @param $key
-     * @return mixed
-     */
-    public function getMessageFromFile($key)
-    {
-        return config($key);
-    }
-
-    /**
      * Show the form for creating a new resource.
      *
      * @return JsonResponse
      */
-    public function create()
+    public function create():JsonResponse
     {
         // Create Response Model
         $response = new ResponseModel();
@@ -359,28 +353,12 @@ abstract class SmartCrudController extends Controller
     }
 
     /**
-     * @param Request $request
-     * @return Request
-     */
-    public function storeAfterValidation(Request $request): Request
-    {
-        return $request;
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     *
+     * Be careful this is recursive function
      * @param Request $request
      * @return JsonResponse
      */
-    public function store(Request $request)
+    public function store(Request $request):JsonResponse
     {
-
-//        dd($request->file());
-//        // handle permission
-//        $request = $this->handlePermission(__FUNCTION__, $request);
-
-        // Create Response Model
         $response = new ResponseModel();
 
         if (!isset($userId)) {
@@ -404,86 +382,181 @@ abstract class SmartCrudController extends Controller
             $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
             $response->setError($validationErrors->toArray());
             return SmartResponse::response($response);
-
         }
 
-        $request = $this->storeAfterValidation($request);
+        // Method for customize
+        $request = $this->afterValidation(__FUNCTION__, $request);
 
-
-        // init reuqest for multiple model key
+        // init request for multiple model key
         if (is_array($this->model->getKeyName())) {
             foreach ($this->model->getKeyName() as $keyName) {
                 $request->request->set($keyName, $request->$keyName);
             }
         }
 
+        // Get all object of request
+        $objects = $request->all();
+
         try {
-            // get result of model creation
-//            $modelObject = new $this->model
-            if (count($this->storeOrUpdateFields)) {
-                $whereCondition = [];
-                foreach ($this->storeOrUpdateFields as $storeOrUpdateField) {
-                    array_push($whereCondition, [$storeOrUpdateField, $request->$storeOrUpdateField]);
-                }
-                $result = $this->model->updateOrCreate($whereCondition, $request->toArray());
-            } else {
-                $result = new $this->model($request->all());
-                // Create Associates
-                foreach ($this->associates as $associateKey => $associateModel) {
-                    if ($request->has($associateKey)) {
-                        if (in_array($associateKey . '_id', $this->model->getFillable())) {
-                            $associateObject = new $associateModel(json_decode($request->get($associateKey), true));
-                            $associateObject->save();
-                            $result->$associateKey()->associate($associateObject);
-                        }
-                    }
-                }
-                $result->save();
-            }
-
-            // init for multi key models
-            $afterModelSavedFilter = [];
-            if (is_array($this->model->getKeyName())) {
-                foreach ($this->model->getKeyName() as $keyName) {
-                    array_push($afterModelSavedFilter, [
-                        $keyName, '=', $result[$keyName],
-                    ]);
-                }
-            } else {
-                array_push($afterModelSavedFilter, [
-                    $this->model->getKeyName(), '=', $result[$this->model->getKeyName()]
-                ]);
-            }
-
-            // sync many to many relation
-            foreach ($this->pivotFields as $pivotField) {
-                if (collect($request[$pivotField])->count()) {
-                    $pivotField = (new StringHelper())->toCamel($pivotField);
-                    $this->model->where($afterModelSavedFilter)->first()->$pivotField()->sync(json_decode($request[$pivotField]));
-                }
-            }
-            $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
-
-            $relations = $this->getRequestRelations($request);
-            $relations = $this->getArrayWithPriority($this->updateLoad, $this->indexRelations, $relations);
-            $response->setData($this->model
-                ->where($afterModelSavedFilter)
-                ->with($relations)
-                ->get());
-
+            [$model, $resultObject] = $this->deepAssociation($this->model, $objects);
+            $response->setData(collect($resultObject));
+            $response->setMessage($this->getTrans(__FUNCTION__, 'success'));
             $response->setStatusCode(201);
-
-        } catch (QueryException $exception) {
-            $response->setError(['query_exception' => $exception->getMessage()]);
+        } catch (\Exception $exception) {
+            $response->setError([$exception->getMessage()]);
             $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
             $response->setStatusCode(409);
-            return SmartResponse::response($response);
         }
 
-        // assign something before response
+        // Assign something before response
         $response = $this->beforeResponse(__FUNCTION__, $response, $request);
 
+        // Response
         return SmartResponse::response($response);
+    }
+
+    /**
+     * @param array $arr
+     * @return bool
+     */
+    function isAssoc(array $arr):bool
+    {
+        if (array() === $arr) return false;
+        return array_keys($arr) !== range(0, count($arr) - 1);
+    }
+
+    /**
+     * @param $model
+     * @param array $objects
+     * @return array
+     */
+    public function deepAssociation($model, array $objects):array
+    {
+        $modelKeys = $model->getModel()->getKeyName();
+        if ($this->isAssoc($objects)) {
+            [$model, $resultObject] = $this->createObjectsInDB($model, $modelKeys, $objects);
+        } else {
+            $resultObject = [];
+            foreach ($objects as $object) {
+                [$tmp, $resultObjectItem] = $this->createObjectsInDB($model, $modelKeys, $object);
+                array_push($resultObject, $resultObjectItem);
+            }
+
+        }
+        return [$model, $resultObject];
+    }
+
+    /**
+     * @param $model
+     * @param $modelKeys
+     * @param array $object
+     * @return mixed
+     */
+    private function firstOrCreateObject($model, $modelKeys, array $object)
+    {
+        list($condition, $object) = $this->getConditionByModelKeys($modelKeys, $object);
+
+        if (
+            is_array($condition) &&
+            count($condition)
+        ) {
+            $currentModelObject = $model->getModel()->where($condition)->first();
+
+            if ($currentModelObject == null) {
+                $modelObject = $model->firstOrCreate($condition, $object);
+                $modelObject->update($object);
+            } else {
+                $currentModelObject->update($object);
+                $modelObject = $currentModelObject;
+                if ($model instanceof HasMany) {
+                    $model->save($currentModelObject);
+                } else {
+                    if (count($model->toArray()) > 0) {
+                        $model->save($currentModelObject);
+                    }
+                }
+            }
+        } else {
+            $modelObject = $model->create($object);
+        }
+        return $modelObject;
+    }
+
+    /**
+     * @param $object
+     * @param $modelObject
+     * @return array
+     */
+    private function findAnotherObjectForAssociation($object, $modelObject):array
+    {
+        $model = null;
+        $resultObject = $modelObject->toArray();
+        foreach ($object as $objectKey => $objectValue) {
+            if (is_array($objectValue) && !key_exists($objectKey, $modelObject->getFillable())) {
+                [$model, $resultObjectItems] = $this->deepAssociation($modelObject->$objectKey(), $objectValue);
+                $resultObject[$objectKey] = $resultObjectItems;
+            }
+        }
+        return [$model, $resultObject];
+    }
+
+    /**
+     * @param array $object
+     * @param $modelKey
+     * @return array
+     */
+    private function fillConditionByModelKey(array $object, $modelKey): array
+    {
+        $condition = [];
+        if (array_key_exists($modelKey, $object)) {
+            array_push($condition, [
+                $modelKey, '=', $object[$modelKey]
+            ]);
+            unset($object[$modelKey]);
+        }
+        return array($condition, $object);
+    }
+
+    /**
+     * @param $modelKeys
+     * @param array $object
+     * @return array
+     */
+    private function getConditionByModelKeys($modelKeys, array $object): array
+    {
+        $condition = [];
+        if (is_array($modelKeys)) {
+            foreach ($modelKeys as $modelKey) {
+                list($condition, $object) = $this->fillConditionByModelKey($object, $modelKey);
+            }
+        } else {
+            $modelKey = $modelKeys;
+            list($condition, $object) = $this->fillConditionByModelKey($object, $modelKey);
+        }
+        return array($condition, $object);
+    }
+
+    /**
+     * @param $model
+     * @param $modelKeys
+     * @param array $object
+     * @return array
+     */
+    private function createObjectsInDB($model, $modelKeys, array $object)
+    {
+        $modelObject = $this->firstOrCreateObject($model, $modelKeys, $object);
+        [$model, $resultObject] = $this->findAnotherObjectForAssociation($object, $modelObject);
+        return [$model, $resultObject];
+    }
+
+    /**
+     * @param string $functionName
+     * @param Request $request
+     * @return Request
+     */
+    public function afterValidation(string $functionName, Request $request): Request
+    {
+        return $request;
     }
 
     /**
@@ -493,7 +566,7 @@ abstract class SmartCrudController extends Controller
      * @param int $id
      * @return JsonResponse
      */
-    public function show(Request $request)
+    public function show(Request $request):JsonResponse
     {
         $filters = [];
 //        // handle permission
@@ -513,7 +586,7 @@ abstract class SmartCrudController extends Controller
                     );
                 }
             } else {
-                $queryStringKey = Str::singular(strtolower($this->model->getTable()));
+                $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
                 $index = $request->$queryStringKey;
                 $keyName = $this->model->getKeyName();
                 array_push($filters,
@@ -551,10 +624,10 @@ abstract class SmartCrudController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param int $id
+     * @param Request $request
      * @return JsonResponse
      */
-    public function edit($id)
+    public function edit(Request $request):JsonResponse
     {
         $filters = [];
 //        // handle permission
@@ -566,9 +639,12 @@ abstract class SmartCrudController extends Controller
         try {
             $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
 
+            $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
+            $index = $request->$queryStringKey;
+
             // add filter to get desired record
             array_push($filters,
-                [$this->model->getKeyName(), '=', $id]
+                [$this->model->getKeyName(), '=', $index]
             );
             $data = $this->model
                 ->where($filters)
@@ -592,10 +668,9 @@ abstract class SmartCrudController extends Controller
      * Update the specified resource in storage.
      *
      * @param Request $request
-     * @param int $id
      * @return JsonResponse
      */
-    public function update(Request $request, $id)
+    public function update(Request $request):JsonResponse
     {
         // Handle permission
 //        $request = $this->handlePermission(__FUNCTION__,$request);
@@ -608,9 +683,12 @@ abstract class SmartCrudController extends Controller
         // Create Response Model
         $response = new ResponseModel();
 
+        $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
+        $index = $request->$queryStringKey;
+
         // Filters
         array_push($filters,
-            [$this->model->getKeyName(), '=', $id]
+            [$this->model->getKeyName(), '=', $index]
         );
 
         $validateParams = $this->getArrayWithPriority($this->updateValidateArray, $this->storeValidateArray);
@@ -672,16 +750,19 @@ abstract class SmartCrudController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @param int $id
+     * @param Request $request
      * @return JsonResponse
      */
-    public function destroy($id)
+    public function destroy(Request $request):JsonResponse
     {
         // Create Response Model
         $response = new ResponseModel();
 
         try {
-            $response->setData(collect(['row_affected' => (int)$this->model->findOrFail($id)->delete()]));
+            $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
+            $index = $request->$queryStringKey;
+
+            $response->setData(collect(['row_affected' => (int)$this->model->findOrFail($index)->delete()]));
             $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
 
         } catch (ModelNotFoundException $exception) {
@@ -697,28 +778,33 @@ abstract class SmartCrudController extends Controller
     /**
      * @param $method
      * @param $status
-     * @return array|\Illuminate\Contracts\Translation\Translator|null|string
+     * @return string|null
      */
-    public function getTrans($method, $status)
+    public function getTrans($method, $status): ?string
     {
         if (is_null($this->defaultLocaleClass)) {
             $className = Arr::last(explode('\\', get_class($this)));
         } else {
             $className = $this->defaultLocaleClass;
         }
-        return trans(
-            'laravel_smart_restful::' .
+        $message = trans(
+            'laravel-smart-restful::' .
             $this->localPrefix . '.' .
             ($className === '' ? '' : ($className . '.')) .
             $method . '.' .
             $status
         );
+        if (is_string($message)) {
+            return $message;
+        }
+        return null;
     }
+
 
     /**
      * set locale
      */
-    public function setLocale()
+    public function setLocale():void
     {
         if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
             app('translator')->setLocale($_SERVER['HTTP_ACCEPT_LANGUAGE']);
@@ -1250,21 +1336,12 @@ abstract class SmartCrudController extends Controller
      */
     public function getPageSize(Request $request): int
     {
-//set page size
+        //set page size
         if (isset($request['page_size'])) {
             return $request['page_size'];
         } else {
             return $this->DEFAULT_RESULT_PER_PAGE;
         }
-
-//        if (!isset($request->toArray()['page']['size'])) {
-//            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
-//        } elseif (($request->get('page')['size']) == 0) {
-//            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
-//        } else {
-//            $pageSize = $request->get('page')['size'];
-//        }
-//        return $pageSize;
     }
 
     /**

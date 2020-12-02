@@ -10,6 +10,8 @@ use Alive2212\LaravelSmartResponse\SmartResponse;
 use Alive2212\LaravelStringHelper\StringHelper;
 use App\Group;
 use App\Http\Controllers\Controller;
+use http\Message;
+use Illuminate\Contracts\Translation\Translator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
@@ -17,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\MessageBag;
 use Mockery\Exception;
 
 
@@ -314,7 +317,12 @@ abstract class BaseController extends Controller
         }
     }
 
-    public function checkRequestValidation(Request $request, $validationArray)
+    /**
+     * @param Request $request
+     * @param $validationArray
+     * @return MessageBag|null
+     */
+    public function checkRequestValidation(Request $request, $validationArray): ?MessageBag
     {
         $requestParams = $request->toArray();
         $validator = Validator::make($request->all(), $validationArray);
@@ -346,7 +354,7 @@ abstract class BaseController extends Controller
     /**
      * Show the form for creating a new resource.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function create()
     {
@@ -362,8 +370,8 @@ abstract class BaseController extends Controller
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @param Request $request
+     * @return JsonResponse
      */
     public function store(Request $request)
     {
@@ -430,8 +438,8 @@ abstract class BaseController extends Controller
     /**
      * Display the specdefaultied resource.
      *
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @param int $id
+     * @return JsonResponse
      */
     public function show($id)
     {
@@ -469,8 +477,8 @@ abstract class BaseController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @param int $id
+     * @return JsonResponse
      */
     public function edit($id)
     {
@@ -509,9 +517,9 @@ abstract class BaseController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request $request
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
      */
     public function update(Request $request, $id)
     {
@@ -586,8 +594,8 @@ abstract class BaseController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @param int $id
+     * @return JsonResponse
      */
     public function destroy($id)
     {
@@ -613,7 +621,7 @@ abstract class BaseController extends Controller
     /**
      * @param $method
      * @param $status
-     * @return array|\Illuminate\Contracts\Translation\Translator|null|string
+     * @return array|Translator|null|string
      */
     public function getTrans($method, $status)
     {
@@ -623,7 +631,7 @@ abstract class BaseController extends Controller
             $className = $this->defaultLocaleClass;
         }
         return trans(
-            'laravel_smart_restful::' .
+            'laravel-smart-restful::' .
             $this->localPrefix . '.' .
             ($className === '' ? '' : ($className . '.')) .
             $method . '.' .
@@ -698,12 +706,17 @@ abstract class BaseController extends Controller
     public function handleIndexOwnPermission(Request $request, $id = null): Request
     {
         $request = $this->getFilters($request);
-        $request = $this->putOwnerFilter($request,auth()->id());
+        $request = $this->putOwnerFilter($request, auth()->id());
         $request = $this->putGroupFilter($request);
         $request = $this->putJsonFilters($request);
         return $request;
     }
 
+    /**
+     * @param Request $request
+     * @param $id
+     * @return Request
+     */
     public function handleIndexGuestPermission(Request $request, $id)
     {
         $request = $this->getFilters($request);
@@ -868,12 +881,22 @@ abstract class BaseController extends Controller
         return [$request, $filters];
     }
 
+    /**
+     * @param Request $request
+     * @param $id
+     * @return array
+     */
     public function handleEditAdminPermission(Request $request, $id)
     {
         $filters = [];
         return [$request, $filters];
     }
 
+    /**
+     * @param Request $request
+     * @param $id
+     * @return array
+     */
     public function handleEditBranchPermission(Request $request, $id)
     {
         $filters = [];
@@ -1020,6 +1043,10 @@ abstract class BaseController extends Controller
         return $request;
     }
 
+    /**
+     * @param $name
+     * @return String
+     */
     public function getRequestTagName($name): String
     {
         return $this->shortTagName . '_' . $name;
@@ -1067,7 +1094,7 @@ abstract class BaseController extends Controller
      * @param $userId
      * @return Request
      */
-    public function putOwnerFilter(Request $request,$userId = null): Request
+    public function putOwnerFilter(Request $request, $userId = null): Request
     {
         $request[$this->getRequestTagName('filter')] =
             $this->addFilter(
@@ -1092,7 +1119,7 @@ abstract class BaseController extends Controller
     /**
      * @return mixed
      */
-    public function getModel():Model
+    public function getModel(): Model
     {
         return $this->model;
     }
@@ -1109,7 +1136,7 @@ abstract class BaseController extends Controller
 
     /**
      * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function successfulResponse(Request $request): JsonResponse
     {
@@ -1126,7 +1153,7 @@ abstract class BaseController extends Controller
 
     /**
      * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function failedResponse(Request $request): JsonResponse
     {
