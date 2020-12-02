@@ -22,7 +22,6 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\Str;
 
-
 abstract class SmartCrudController extends Controller
 {
     /**
@@ -36,6 +35,9 @@ abstract class SmartCrudController extends Controller
      * base pattern
      */
     use BasePattern;
+
+
+    protected $forceUpdateKey = 'smart_restful_force_update';
 
     /**
      * store tag to store data of request
@@ -214,6 +216,13 @@ abstract class SmartCrudController extends Controller
      */
     protected $modelKey = null;
 
+
+    /**
+     * This variable for update model if exist in store and update method
+     * @var bool
+     */
+    protected $forceUpdateOnStore = false;
+
     /**
      * defaultController constructor.
      */
@@ -248,7 +257,7 @@ abstract class SmartCrudController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request)
     {
         // handle permission
 //        list($request, $filters) = $this->handlePermission(__FUNCTION__, $request);
@@ -341,7 +350,7 @@ abstract class SmartCrudController extends Controller
      *
      * @return JsonResponse
      */
-    public function create():JsonResponse
+    public function create(): JsonResponse
     {
         // Create Response Model
         $response = new ResponseModel();
@@ -357,7 +366,7 @@ abstract class SmartCrudController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function store(Request $request):JsonResponse
+    public function store(Request $request): JsonResponse
     {
         $response = new ResponseModel();
 
@@ -397,6 +406,11 @@ abstract class SmartCrudController extends Controller
         // Get all object of request
         $objects = $request->all();
 
+        if (key_exists($this->forceUpdateKey, $objects)) {
+            $this->forceUpdateOnStore = $objects[$this->forceUpdateKey];
+            unset($objects[$this->forceUpdateKey]);
+        }
+
         try {
             [$model, $resultObject] = $this->deepAssociation($this->model, $objects);
             $response->setData(collect($resultObject));
@@ -419,7 +433,7 @@ abstract class SmartCrudController extends Controller
      * @param array $arr
      * @return bool
      */
-    function isAssoc(array $arr):bool
+    function isAssoc(array $arr): bool
     {
         if (array() === $arr) return false;
         return array_keys($arr) !== range(0, count($arr) - 1);
@@ -430,7 +444,7 @@ abstract class SmartCrudController extends Controller
      * @param array $objects
      * @return array
      */
-    public function deepAssociation($model, array $objects):array
+    public function deepAssociation($model, array $objects): array
     {
         $modelKeys = $model->getModel()->getKeyName();
         if ($this->isAssoc($objects)) {
@@ -487,7 +501,7 @@ abstract class SmartCrudController extends Controller
      * @param $modelObject
      * @return array
      */
-    private function findAnotherObjectForAssociation($object, $modelObject):array
+    private function findAnotherObjectForAssociation($object, $modelObject): array
     {
         $model = null;
         $resultObject = $modelObject->toArray();
@@ -566,7 +580,7 @@ abstract class SmartCrudController extends Controller
      * @param int $id
      * @return JsonResponse
      */
-    public function show(Request $request):JsonResponse
+    public function show(Request $request): JsonResponse
     {
         $filters = [];
 //        // handle permission
@@ -627,7 +641,7 @@ abstract class SmartCrudController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function edit(Request $request):JsonResponse
+    public function edit(Request $request): JsonResponse
     {
         $filters = [];
 //        // handle permission
@@ -664,87 +678,17 @@ abstract class SmartCrudController extends Controller
         return SmartResponse::response($response);
     }
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function update(Request $request):JsonResponse
+    public function update(Request $request): JsonResponse
     {
-        // Handle permission
-//        $request = $this->handlePermission(__FUNCTION__,$request);
-//        if ($request->has('permission_filters')){
-//            $filters = $request['permission_filters'];
-//        }else{
-        $filters = [];
-//        }
-
-        // Create Response Model
-        $response = new ResponseModel();
-
-        $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
-        $index = $request->$queryStringKey;
-
-        // Filters
-        array_push($filters,
-            [$this->model->getKeyName(), '=', $index]
-        );
-
-        $validateParams = $this->getArrayWithPriority($this->updateValidateArray, $this->storeValidateArray);
-        $validationErrors = $this->checkRequestValidation($request, $validateParams);
-        if ($validationErrors != null) {
-            $response->setStatusCode(422);
-            $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
-            $response->setError($validationErrors->toArray());
-            return SmartResponse::response($response);
+        // add filter to get desired record
+        if (is_array($this->model->getKeyName())) {
+        } else {
+            $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
+            $keyName = $this->model->getKeyName();
+            $request[$keyName] = $request->$queryStringKey;
         }
-
-        try {
-            // sync many to many relation
-//            foreach ($this->pivotFields as $pivotField) {
-//                if (collect($request[$pivotField])->count()) {
-//                    $pivotMethod = (new StringHelper())->toCamel($pivotField);
-//                    dd($this->model->findOrFail($id)->tags()->detach());
-//                    $this->model->findOrFail($id)->$pivotMethod()->sync(json_decode($request[$pivotField], true));
-//                }
-//            }
-            foreach ($this->pivotFields as $pivotField) {
-                if (collect($request[$pivotField])->count()) {
-                    $pivotField = (new StringHelper())->toCamel($pivotField);
-                    $this->model->find($id)->$pivotField()->sync(json_decode($request[$pivotField]));
-                }
-            }
-
-
-            //get result of update
-            $result = $this->model->where($filters)->firstOrFail()->update($request->all());
-
-            // return response
-            $response->setData($this->model
-                ->where($filters)
-                ->with(collect($this->updateLoad)->count() == 0 ? $this->indexRelations : $this->updateLoad)
-                ->get());
-            $response->setMessage(
-                $this->getTrans(__FUNCTION__, 'successful1') .
-                $result .
-                $this->getTrans(__FUNCTION__, 'successful2')
-            );
-
-        } catch (ModelNotFoundException $exception) {
-            $response->setStatusCode(404);
-            $response->setMessage($this->getTrans(__FUNCTION__, 'model_not_found'));
-            $response->setError(['model_not_found_exception' => $exception->getMessage()]);
-            if (env('APP_DEBUG', false)) {
-                $response->setData(collect($exception->getMessage()));
-            }
-
-        } catch (QueryException $exception) {
-            $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
-            $response->setError(['query_exception' => $exception->getMessage()]);
-        }
-
-        return SmartResponse::response($response);
+        $request[$this->forceUpdateKey] = true;
+        return $this->store($request);
     }
 
     /**
@@ -753,7 +697,7 @@ abstract class SmartCrudController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function destroy(Request $request):JsonResponse
+    public function destroy(Request $request): JsonResponse
     {
         // Create Response Model
         $response = new ResponseModel();
@@ -804,7 +748,7 @@ abstract class SmartCrudController extends Controller
     /**
      * set locale
      */
-    public function setLocale():void
+    public function setLocale(): void
     {
         if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
             app('translator')->setLocale($_SERVER['HTTP_ACCEPT_LANGUAGE']);
