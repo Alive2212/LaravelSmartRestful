@@ -9,18 +9,24 @@ use Alive2212\LaravelStringHelper\StringHelper;
 use App\Http\Controllers\Controller;
 use Alive2212\LaravelSmartResponse\ResponseModel;
 use Alive2212\LaravelSmartResponse\SmartResponse;
-use http\Message;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\MessageBag;
 use Illuminate\Support\Str;
+use stdClass;
+use Throwable;
 
 abstract class SmartCrudController extends Controller
 {
@@ -31,13 +37,12 @@ abstract class SmartCrudController extends Controller
      * define your rules for index,store and update
      */
 
+    protected $forceUpdateKey = 'smart_restful_force_update';
+
     /**
      * base pattern
      */
     use BasePattern;
-
-
-    protected $forceUpdateKey = 'smart_restful_force_update';
 
     /**
      * store tag to store data of request
@@ -216,12 +221,26 @@ abstract class SmartCrudController extends Controller
      */
     protected $modelKey = null;
 
+    /**
+     * key for split
+     *
+     * @var string
+     */
+    protected $manyToManyKeyDelimiter = ":";
 
     /**
-     * This variable for update model if exist in store and update method
-     * @var bool
+     * key for split parameters
+     *
+     * @var string
      */
-    protected $forceUpdateOnStore = false;
+    protected $manyToManyParameterKeyDelimiter = ",";
+
+    /**
+     * key for remove all last relations
+     *
+     * @var string
+     */
+    protected $manyToManySyncKey = "sync";
 
     /**
      * defaultController constructor.
@@ -242,20 +261,65 @@ abstract class SmartCrudController extends Controller
 
     /**
      * @param string $functionName
-     * @param ResponseModel $responseModel
      * @param Request $request
      * @return ResponseModel
      */
-    public function beforeResponse(string $functionName, ResponseModel $responseModel, Request $request): ResponseModel
+    public function beforeResponse(string $functionName, $responseModel, Request $request): ResponseModel
     {
         return $responseModel;
+    }
+
+    public function getSum($item, array $methods, $column)
+    {
+        if (count($methods) < 1) return 0;
+        if (count($methods) == 1) {
+            if ($item instanceof Collection) {
+                return $item->sum($column);
+            } else {
+                $method = $methods[0];
+                return $item->$method->$column;
+            }
+        }
+
+        foreach ($methods as $index => $method) {
+            $usableMethods = array_slice($methods, 0, $index + 1);
+
+            $workingItem = $item;
+            foreach ($usableMethods as $uMethod) {
+                if (isset($workingItem->$uMethod)) {
+                    $workingItem = $workingItem->$uMethod;
+                }
+            }
+
+            if ($workingItem instanceof Collection) {
+                $newUsableMethods = array_slice($methods, $index);
+                if (count($newUsableMethods) === 1) {
+                    return $workingItem->sum($column);
+                }
+                $workingItem->sum(function ($newItem) use ($newUsableMethods, $column) {
+                    return $this->getSum($newItem, $newUsableMethods, $column);
+                });
+
+            }
+        }
+        $workingItem = $item;
+        foreach ($methods as $uMethod) {
+            if (isset($workingItem->$uMethod)) {
+                $workingItem = $workingItem->$uMethod;
+            }
+        }
+        if ($workingItem instanceof Collection) {
+            return $item->sum(implode('.', $methods) . "." . $column);
+        } else {
+            return $workingItem->$column;
+        }
     }
 
     /**
      * Display a listing of the resource.
      *
      * @param Request $request
-     * @return JsonResponse
+     * @return string
      */
     public function index(Request $request)
     {
@@ -293,13 +357,6 @@ abstract class SmartCrudController extends Controller
                         ->raw())->get('ids')) :
                 $this->model;
 
-            if (array_key_exists('file', $request->toArray())) {
-                //TODO add relation on top if here and create a tree flatter array in array helper
-                //return (new ExcelHelper())->setOptions([
-                //    'store_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
-                //    'download_format' => $request->get('file') == null ? 'xls' : $request->get('file'),
-                //])->table($data->get()->toArray())->createExcelFile()->download();
-            }
             // load relations
             $relations = $this->getRequestRelations($request);
             $data = $this->addRelationToData($data, $this->getArrayWithPriority($this->indexRelations, $relations));
@@ -314,10 +371,38 @@ abstract class SmartCrudController extends Controller
                 $data = (new QueryHelper())->orderBy($data, (new RequestHelper())->getCollectFromJson($request['order_by']));
             }
 
+            $finalData = collect($data->paginate($pageSize));
 
-            // return response
-            $response->setData(collect($data->paginate($pageSize)));
+            // Summation
+            if ($request->get('summations') != null) {
+                $summations = json_decode($request->get('summations'));
+                $summationsResults = [];
+
+                foreach ($summations as $summationIndex => $summationItems) {
+                    $query = clone $data;
+//                    $query->paginate(9999999);
+                    $methods = explode(".", $summationItems);
+                    $column = array_pop($methods);
+                    $relation = implode('.', $methods);
+
+                    $summaryResult = $query->with($relation)->whereHas($relation)->limit(9999999)->offset(0)->get()->sum(function ($item) use ($methods, $column) {
+                        return $this->getSum($item, $methods, $column);
+                    });
+                    $summationsResults[$summationItems] = $summaryResult;
+                }
+                $finalData['summations'] = $summationsResults;
+            }
+
+            // Set Response Data
+            $response->setData($finalData);
+
+
             $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
+
+            // assign something before response
+            $response = $this->beforeResponse(__FUNCTION__, $response, $request);
+
+            return SmartResponse::response($response);
 
         } catch (QueryException $exception) {
 
@@ -325,16 +410,11 @@ abstract class SmartCrudController extends Controller
             $response->setData(collect($exception->getMessage()));
             $response->setError(['query_exception' => $exception->getMessage()]);
             $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
+            return SmartResponse::response($response);
         }
-        return SmartResponse::response($response);
     }
 
-    /**
-     * @param Request $request
-     * @param $validationArray
-     * @return \Illuminate\Support\MessageBag|null
-     */
-    public function checkRequestValidation(Request $request, $validationArray): ?MessageBag
+    public function checkRequestValidation(Request $request, $validationArray)
     {
 
         $requestParams = $request->toArray();
@@ -350,7 +430,7 @@ abstract class SmartCrudController extends Controller
      *
      * @return JsonResponse
      */
-    public function create(): JsonResponse
+    public function create()
     {
         // Create Response Model
         $response = new ResponseModel();
@@ -362,11 +442,20 @@ abstract class SmartCrudController extends Controller
     }
 
     /**
-     * Be careful this is recursive function
+     * @param Request $request
+     * @return Request
+     */
+    public function storeAfterValidation(Request $request): Request
+    {
+        return $request;
+    }
+
+    /**
      * @param Request $request
      * @return JsonResponse
+     * @throws \Exception
      */
-    public function store(Request $request): JsonResponse
+    public function store(Request $request)
     {
         $response = new ResponseModel();
 
@@ -412,18 +501,20 @@ abstract class SmartCrudController extends Controller
         }
 
         try {
+            DB::beginTransaction();
             [$model, $resultObject] = $this->deepAssociation($this->model, $objects);
             $response->setData(collect($resultObject));
             $response->setMessage($this->getTrans(__FUNCTION__, 'success'));
             $response->setStatusCode(201);
-        } catch (\Exception $exception) {
-            $response->setError([$exception->getMessage()]);
+            // Assign something before response
+            $response = $this->beforeResponse(__FUNCTION__, $response, $request);
+            DB::commit();
+        } catch (Throwable $e) {
+            DB::rollBack();
+            $response->setError([$e->getMessage()]);
             $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
             $response->setStatusCode(409);
         }
-
-        // Assign something before response
-        $response = $this->beforeResponse(__FUNCTION__, $response, $request);
 
         // Response
         return SmartResponse::response($response);
@@ -460,6 +551,11 @@ abstract class SmartCrudController extends Controller
         return [$model, $resultObject];
     }
 
+    public function firstOrCreateAfterInitCondition($model, $modelKeys, $condition, $objectWithoutKey, $object)
+    {
+        return array($condition, $objectWithoutKey);
+    }
+
     /**
      * @param $model
      * @param $modelKeys
@@ -468,8 +564,18 @@ abstract class SmartCrudController extends Controller
      */
     private function firstOrCreateObject($model, $modelKeys, array $object)
     {
-        list($condition, $object) = $this->getConditionByModelKeys($modelKeys, $object);
+        list($condition, $objectWithoutKey) = $this->getConditionByModelKeys($modelKeys, $object);
 
+        $condition = $this->addConditionByUniqueFields($model, $objectWithoutKey, $condition);
+
+
+        list($condition, $objectWithoutKey) = $this->firstOrCreateAfterInitCondition(
+            $model,
+            $modelKeys,
+            $condition,
+            $objectWithoutKey,
+            $objectWithoutKey
+        );
         if (
             is_array($condition) &&
             count($condition)
@@ -477,13 +583,35 @@ abstract class SmartCrudController extends Controller
             $currentModelObject = $model->getModel()->where($condition)->first();
 
             if ($currentModelObject == null) {
-                $modelObject = $model->firstOrCreate($condition, $object);
-                $modelObject->update($object);
+                if ($model instanceof MorphOne) {
+                    $modelObject = $model->where($condition)->first();
+                    if (!$modelObject) {
+                        $modelObject = $model->create($object);
+                    }
+                    $modelObject->update($object);
+                } else {
+                    $modelObject = $model->firstOrCreate($condition, $object);
+                    $modelObject->update($object);
+                }
             } else {
                 $currentModelObject->update($object);
                 $modelObject = $currentModelObject;
                 if ($model instanceof HasMany) {
                     $model->save($currentModelObject);
+                } elseif ($model instanceof BelongsToMany) {
+                    $id = $object[$modelKeys];
+                    if (array_key_exists("pivot", $objectWithoutKey)) {
+                        $pivotTitles = $objectWithoutKey["pivot"];
+                        $model->attach($id, $pivotTitles);
+                    } else {
+                        $model->attach($id);
+                    }
+                } elseif ($model instanceof MorphOne) {
+                    $model->save($currentModelObject);
+                } elseif ($model instanceof HasOne) {
+                    if (count($model->first()->toArray()) > 0) {
+                        $model->save($currentModelObject);
+                    }
                 } else {
                     if (count($model->toArray()) > 0) {
                         $model->save($currentModelObject);
@@ -505,10 +633,50 @@ abstract class SmartCrudController extends Controller
     {
         $model = null;
         $resultObject = $modelObject->toArray();
-        foreach ($object as $objectKey => $objectValue) {
-            if (is_array($objectValue) && !key_exists($objectKey, $modelObject->getFillable())) {
-                [$model, $resultObjectItems] = $this->deepAssociation($modelObject->$objectKey(), $objectValue);
-                $resultObject[$objectKey] = $resultObjectItems;
+        foreach ($object as $objectKeyWithParams => $objectValue) {
+            if (is_array($objectValue) && !key_exists($objectKeyWithParams, $modelObject->getFillable())) {
+                $objectKeys = explode($this->manyToManyKeyDelimiter, $objectKeyWithParams);
+                $objectKey = $objectKeys[0];
+                unset($objectKeys[0]);
+                if (count($objectKeys) > 0) {
+                    $objectKeys = explode($this->manyToManyParameterKeyDelimiter, $objectKeys[1]);
+                }
+                if (method_exists($modelObject, $objectKey)) {
+                    $relativeModel = $modelObject->$objectKey();
+                    if (
+                        $relativeModel instanceof BelongsToMany &&
+                        count($objectValue)
+                    ) {
+                        if (in_array($this->manyToManySyncKey, $objectKeys)
+                        ) {
+                            $relativeModel->sync([], true);
+                        }
+                        if (!$this->isAssoc($objectValue)) {
+                            $detachIds = [];
+                            foreach ($objectValue as $item) {
+                                //TODO it should dynamic for id or another key/keys of models
+                                if (array_key_exists('pivot', $item)) {
+                                    array_push($detachIds, $item['id']);
+                                }
+                            }
+                            if (count($detachIds)) {
+                                $relativeModel->detach($detachIds);
+                            }
+                        }
+                    }
+                    if (
+                        $relativeModel instanceof MorphMany &&
+                        count($objectValue)
+                    ) {
+                        if (in_array($this->manyToManySyncKey, $objectKeys)
+                        ) {
+                            $tmp = $relativeModel->delete();
+                        }
+                    }
+
+                    [$model, $resultObjectItems] = $this->deepAssociation($relativeModel, $objectValue);
+                    $resultObject[$objectKey] = $resultObjectItems;
+                };
             }
         }
         return [$model, $resultObject];
@@ -583,9 +751,7 @@ abstract class SmartCrudController extends Controller
     public function show(Request $request): JsonResponse
     {
         $filters = [];
-//        // handle permission
-//        $filters = $this->handlePermission(__FUNCTION__);
-
+        // handle permission
         // Create Response Model
         $response = new ResponseModel();
 
@@ -678,11 +844,17 @@ abstract class SmartCrudController extends Controller
         return SmartResponse::response($response);
     }
 
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     * @throws \Exception
+     */
     public function update(Request $request): JsonResponse
     {
         // add filter to get desired record
-        if (is_array($this->model->getKeyName())) {
-        } else {
+        if (!is_array($this->model->getKeyName())) {
             $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
             $keyName = $this->model->getKeyName();
             $request[$keyName] = $request->$queryStringKey;
@@ -697,7 +869,7 @@ abstract class SmartCrudController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function destroy(Request $request): JsonResponse
+    public function destroy(Request $request)
     {
         // Create Response Model
         $response = new ResponseModel();
@@ -722,33 +894,28 @@ abstract class SmartCrudController extends Controller
     /**
      * @param $method
      * @param $status
-     * @return string|null
+     * @return array|\Illuminate\Contracts\Translation\Translator|null|string
      */
-    public function getTrans($method, $status): ?string
+    public function getTrans($method, $status)
     {
         if (is_null($this->defaultLocaleClass)) {
             $className = Arr::last(explode('\\', get_class($this)));
         } else {
             $className = $this->defaultLocaleClass;
         }
-        $message = trans(
-            'laravel-smart-restful::' .
+        return trans(
+            'laravel_smart_restful::' .
             $this->localPrefix . '.' .
             ($className === '' ? '' : ($className . '.')) .
             $method . '.' .
             $status
         );
-        if (is_string($message)) {
-            return $message;
-        }
-        return null;
     }
-
 
     /**
      * set locale
      */
-    public function setLocale(): void
+    public function setLocale()
     {
         if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
             app('translator')->setLocale($_SERVER['HTTP_ACCEPT_LANGUAGE']);
@@ -842,239 +1009,6 @@ abstract class SmartCrudController extends Controller
     }
 
     /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
-    public function handleStoreBranchPermission(Request $request, $id)
-    {
-        // check for group of user
-        if (!is_null($this->groupTitle)) {
-            // get group model
-            $group = new Group();
-            $group = $group->where('title', $this->groupTitle)->first();
-            $request['group_id'] = $group['id'];
-        }
-
-        $request['owner_id'] = auth()->id();
-
-        return [$request, null];
-    }
-
-    /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
-    public function handleStoreOwnPermission(Request $request, $id)
-    {
-        // check for group of user
-        if (!is_null($this->groupTitle)) {
-            // get group model
-            $group = new Group();
-            $group = $group->where('title', $this->groupTitle)->first();
-            $request['group_id'] = $group['id'];
-        }
-
-        $request['owner_id'] = auth()->id();
-
-        return [$request, null];
-    }
-
-    /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
-    public function handleStoreGuestPermission(Request $request, $id)
-    {
-        $request['owner_id'] = null;
-
-        return [$request, null];
-    }
-
-    /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
-    public function handleShowAdminPermission(Request $request, $id)
-    {
-        $filters = [];
-        return [$request, $filters];
-    }
-
-    /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
-    public function handleShowBranchPermission(Request $request, $id)
-    {
-        $filters = [];
-        array_push($filters,
-            ["owner_id", "=", auth()->id()]
-        );
-        if (!is_null($this->groupTitle)) {
-
-            // get group model
-            $group = new Group();
-            $group = $group->where('title', $this->groupTitle)->first();
-
-            // put group_id filter
-            array_push($filters,
-                ['group_id', '=', $group['id']]);
-        }
-        return [$request, $filters];
-    }
-
-    /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
-    public function handleShowOwnPermission(Request $request, $id)
-    {
-        $filters = [];
-        array_push($filters,
-            ["owner_id", "=", auth()->id()]
-        );
-
-        // check for group of user
-        if (!is_null($this->groupTitle)) {
-
-            // get group model
-            $group = new Group();
-            $group = $group->where('title', $this->groupTitle)->first();
-
-            // put group_id filter
-            array_push($filters,
-                ['group_id', '=', $group['id']]);
-        }
-
-        return [$request, $filters];
-    }
-
-    /**
-     * @param Request $request
-     * @param $id
-     * @return array
-     */
-    public function handleShowGuestPermission(Request $request, $id)
-    {
-        $filters = [];
-        array_push($filters,
-            ["owner_id", "=", auth()->id()]
-        );
-
-        // check for group of user
-        if (!is_null($this->groupTitle)) {
-
-            // get group model
-            $group = new Group();
-            $group = $group->where('title', $this->groupTitle)->first();
-
-            // put group_id filter
-            array_push($filters,
-                ['group_id', '=', $group['id']]);
-        }
-
-        return [$request, $filters];
-    }
-
-    public function handleEditAdminPermission(Request $request, $id)
-    {
-        $filters = [];
-        return [$request, $filters];
-    }
-
-    public function handleEditBranchPermission(Request $request, $id)
-    {
-        $filters = [];
-        array_push(
-            $filters,
-            ["owner_id", "=", auth()->id()]
-        );
-        if (!is_null($this->groupTitle)) {
-            $group = new Group();
-            $group = $group->where('title', $this->groupTitle)->first();
-            array_push($filters,
-                ['group_id', '=', $group['id']]);
-        }
-        return [$request, $filters];
-    }
-
-    /**
-     * @param $functionName
-     * @param Request|null $request
-     * @param $params
-     * @return array|Request
-     */
-    public function handleOwnPermission($functionName, Request $request = null, $params)
-    {
-        switch ($functionName) {
-            case 'index':
-            case 'store':
-            case 'show':
-            case 'edit':
-                $filters = [];
-                array_push($filters,
-                    ["owner_id", "=", auth()->id()]
-                );
-
-                // check gor group of user
-                if (!is_null($this->groupTitle)) {
-                    // get group model
-                    $group = new Group();
-                    $group = $group->where('title', $this->groupTitle)->first();
-
-                    // put group_id filter
-                    array_push($filters,
-                        ['group_id', '=', $group['id']]);
-                }
-
-                return $filters;
-            case 'create':
-            case 'update':
-
-                $filters = [];
-                // put to filter
-                array_push($filters,
-                    ["owner_id", "=", auth()->id()]
-                );
-
-                // put to request
-                $request['owner_id'] = auth()->id();
-
-                // check for group of user
-                if (!is_null($this->groupTitle)) {
-                    // get group model
-                    $group = new Group();
-                    $group = $group->where('title', $this->groupTitle)->first();
-
-                    // put group_id filter
-                    array_push($filters,
-                        ['group_id', '=', $group['id']]);
-
-                    // put to request
-                    $request['group_id'] = $group['id'];
-                }
-
-                $request['permission_filters'] = $filters;
-                return $request;
-            case 'destroy':
-                $filters = [];
-                array_push($filters,
-                    ["owner_id", "=", auth()->id()],
-                    ["group_id", "=", $this->groupTitle]
-                );
-                return $filters;
-            default:
-                return $params;
-        }
-    }
-
-    /**
      * @param array $filters
      * @param $key
      * @param $operator
@@ -1134,7 +1068,7 @@ abstract class SmartCrudController extends Controller
         return $request;
     }
 
-    public function getRequestTagName($name): String
+    public function getRequestTagName($name): string
     {
         return $this->shortTagName . '_' . $name;
     }
@@ -1215,7 +1149,7 @@ abstract class SmartCrudController extends Controller
      * @param Model $model
      * @return $this
      */
-    public function setModel(Model $model)
+    public function setModel(Model $model): SmartCrudController
     {
         $this->model = $model;
         return $this;
@@ -1280,12 +1214,21 @@ abstract class SmartCrudController extends Controller
      */
     public function getPageSize(Request $request): int
     {
-        //set page size
+//set page size
         if (isset($request['page_size'])) {
             return $request['page_size'];
         } else {
             return $this->DEFAULT_RESULT_PER_PAGE;
         }
+
+//        if (!isset($request->toArray()['page']['size'])) {
+//            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
+//        } elseif (($request->get('page')['size']) == 0) {
+//            $pageSize = $this->DEFAULT_RESULT_PER_PAGE;
+//        } else {
+//            $pageSize = $request->get('page')['size'];
+//        }
+//        return $pageSize;
     }
 
     /**
@@ -1296,12 +1239,7 @@ abstract class SmartCrudController extends Controller
     {
         $orderBy = $request->get('order_by');
         if (is_null($orderBy) || $orderBy == "") {
-            if (is_array($this->model->getKeyName())) {
-//                dd($this->model->getKeyName()[0]);
-                $orderBy = "[\"" . $this->model->getKeyName()[0] . "\",\"DESC\"]";
-            } else {
-                $orderBy = "[\"" . $this->model->getKeyName() . "\",\"DESC\"]";
-            }
+            $orderBy = "[\"" . $this->model->getKeyName() . "\",\"DESC\"]";
         }
 //        dd($orderBy);
         return $orderBy;
@@ -1330,7 +1268,18 @@ abstract class SmartCrudController extends Controller
      */
     public function addRelationToData($data, array $relations)
     {
-        return $data->with($relations);
+        foreach ($relations as $relation) {
+            if (is_array($relation) || $relation instanceof stdClass) {
+                foreach ($relation as $relationKey => $relationFilter) {
+                    $data = $data->with([$relationKey => function ($query) use ($relationFilter) {
+                        $query = (new QueryHelper())->smartDeepFilter($query, $relationFilter);
+                    }]);
+                }
+            } else {
+                $data = $data->with($relation);
+            }
+        }
+        return $data;
     }
 
     public function getArrayWithPriority(array ...$arrays)
@@ -1341,5 +1290,23 @@ abstract class SmartCrudController extends Controller
             }
         }
         return [];
+    }
+
+    /**
+     * @param $model
+     * @param $objectWithoutKey
+     * @param $condition
+     * @return mixed
+     */
+    private function addConditionByUniqueFields($model, $objectWithoutKey, $condition)
+    {
+        if (property_exists($model, 'uniqueFields')) {
+            foreach ($model->uniqueFields as $uniqueField) {
+                if (array_key_exists($uniqueField, $objectWithoutKey)) {
+                    array_push($condition, [$uniqueField, "=", $objectWithoutKey[$uniqueField]]);
+                }
+            }
+        }
+        return $condition;
     }
 }
