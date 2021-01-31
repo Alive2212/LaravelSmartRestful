@@ -459,20 +459,6 @@ abstract class SmartCrudController extends Controller
     {
         $response = new ResponseModel();
 
-        if (!isset($userId)) {
-            $userId = Auth::id();
-        }
-
-        //add author id into the request if doesn't exist
-        if (is_null($request->get('author_id'))) {
-            $request['author_id'] = $userId;
-        }
-
-        //add user id into the request if doesn't exist
-        if (is_null($request->get('user_id'))) {
-            $request['user_id'] = $userId;
-        }
-
         $validationErrors = $this->checkRequestValidation($request, $this->storeValidateArray);
 
         if ($validationErrors != null) {
@@ -543,6 +529,18 @@ abstract class SmartCrudController extends Controller
         } else {
             $resultObject = [];
             foreach ($objects as $object) {
+                $userId = Auth::id();
+
+                //add author id into the request if doesn't exist
+                if (!array_has($object,'author_id')) {
+                    $object['author_id'] = $userId;
+                }
+
+                //add user id into the request if doesn't exist
+                if (!array_has($object,'user_id')) {
+                    $object['user_id'] = $userId;
+                }
+
                 [$tmp, $resultObjectItem] = $this->createObjectsInDB($model, $modelKeys, $object);
                 array_push($resultObject, $resultObjectItem);
             }
