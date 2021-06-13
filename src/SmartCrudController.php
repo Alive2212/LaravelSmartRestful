@@ -11,6 +11,7 @@ use Alive2212\LaravelSmartResponse\ResponseModel;
 use Alive2212\LaravelSmartResponse\SmartResponse;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -566,7 +567,6 @@ abstract class SmartCrudController extends Controller
 
         $condition = $this->addConditionByUniqueFields($model, $objectWithoutKey, $condition);
 
-
         list($condition, $objectWithoutKey) = $this->firstOrCreateAfterInitCondition(
             $model,
             $modelKeys,
@@ -606,13 +606,20 @@ abstract class SmartCrudController extends Controller
                     }
                 } elseif ($model instanceof MorphOne) {
                     $model->save($currentModelObject);
+                } elseif ($model instanceof MorphMany) {
+                    $model->save($currentModelObject);
                 } elseif ($model instanceof HasOne) {
                     if (count($model->first()->toArray()) > 0) {
                         $model->save($currentModelObject);
                     }
+                } elseif ($model instanceof BelongsTo) {
+                    if ($currentModelObject->get()->toArray() > 0) {
+                        $model->associate($currentModelObject);
+                        $model->getParent()->save();
+                    }
                 } else {
-                    if (count($model->toArray()) > 0) {
-                        $model->save($currentModelObject);
+                    if (count($model->get()->toArray()) > 0) {
+                        return null;
                     }
                 }
             }
@@ -787,7 +794,6 @@ abstract class SmartCrudController extends Controller
             if (env('APP_DEBUG', false)) {
                 $response->setData(collect($exception->getMessage()));
             }
-
         }
 
         if ($response->getData()->count() == 0) {
@@ -1298,8 +1304,11 @@ abstract class SmartCrudController extends Controller
      */
     private function addConditionByUniqueFields($model, $objectWithoutKey, $condition)
     {
-        if (property_exists($model, 'uniqueFields')) {
-            foreach ($model->uniqueFields as $uniqueField) {
+        if (property_exists($model->getModel(), 'uniqueFields')) {
+            if ($model->getModel()->uniqueFields == null) {
+                return $condition;
+            }
+            foreach ($model->getModel()->uniqueFields as $uniqueField) {
                 if (array_key_exists($uniqueField, $objectWithoutKey)) {
                     array_push($condition, [$uniqueField, "=", $objectWithoutKey[$uniqueField]]);
                 }
