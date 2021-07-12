@@ -595,11 +595,14 @@ abstract class SmartCrudController extends Controller
                 } else {
                     $firstOrCreateCondition = [];
                     foreach ($condition as $item) {
-                        Arr::set($firstOrCreateCondition, $item[0] , $item[2]);
+                        Arr::set($firstOrCreateCondition, $item[0], $item[2]);
                     }
-                    $modelObject = $model->firstOrCreate($firstOrCreateCondition, $object);
+                    $modelObject = $model->firstOrCreate(
+                        $firstOrCreateCondition,
+                        collect($object)->only($modelFields)->toArray()
+                    );
                 }
-                $modelObject->update($object);
+                $modelObject->update(collect($object)->only($modelFields)->toArray());
             } else {
                 $currentModelObject->update(collect($object)->only($modelFields)->toArray());
                 $modelObject = $currentModelObject;
