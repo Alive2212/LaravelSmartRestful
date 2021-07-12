@@ -9,6 +9,7 @@ use Alive2212\LaravelStringHelper\StringHelper;
 use App\Http\Controllers\Controller;
 use Alive2212\LaravelSmartResponse\ResponseModel;
 use Alive2212\LaravelSmartResponse\SmartResponse;
+use Exception;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -320,9 +321,9 @@ abstract class SmartCrudController extends Controller
      * Display a listing of the resource.
      *
      * @param Request $request
-     * @return string
+     * @return JsonResponse
      */
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         // handle permission
 //        list($request, $filters) = $this->handlePermission(__FUNCTION__, $request);
@@ -456,7 +457,7 @@ abstract class SmartCrudController extends Controller
      * @return JsonResponse
      * @throws \Exception
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $response = new ResponseModel();
 
@@ -533,12 +534,12 @@ abstract class SmartCrudController extends Controller
                 $userId = Auth::id();
 
                 //add author id into the request if doesn't exist
-                if (!array_has($object,'author_id')) {
+                if (!Arr::has($object, 'author_id')) {
                     $object['author_id'] = $userId;
                 }
 
                 //add user id into the request if doesn't exist
-                if (!array_has($object,'user_id')) {
+                if (!Arr::has($object, 'user_id')) {
                     $object['user_id'] = $userId;
                 }
 
@@ -563,6 +564,12 @@ abstract class SmartCrudController extends Controller
      */
     private function firstOrCreateObject($model, $modelKeys, array $object)
     {
+        if ($model instanceof Model) {
+            $modelFields = $model->getFillable();
+        } else {
+            $modelFields = $model->getModel()->getFillable();
+        }
+
         list($condition, $objectWithoutKey) = $this->getConditionByModelKeys($modelKeys, $object);
 
         $condition = $this->addConditionByUniqueFields($model, $objectWithoutKey, $condition);
@@ -579,25 +586,27 @@ abstract class SmartCrudController extends Controller
             count($condition)
         ) {
             $currentModelObject = $model->getModel()->where($condition)->first();
-
             if ($currentModelObject == null) {
                 if ($model instanceof MorphOne) {
                     $modelObject = $model->where($condition)->first();
                     if (!$modelObject) {
                         $modelObject = $model->create($object);
                     }
-                    $modelObject->update($object);
                 } else {
-                    $modelObject = $model->firstOrCreate($condition, $object);
-                    $modelObject->update($object);
+                    $firstOrCreateCondition = [];
+                    foreach ($condition as $item) {
+                        Arr::set($firstOrCreateCondition, $item[0] , $item[2]);
+                    }
+                    $modelObject = $model->firstOrCreate($firstOrCreateCondition, $object);
                 }
+                $modelObject->update($object);
             } else {
-                $currentModelObject->update($object);
+                $currentModelObject->update(collect($object)->only($modelFields)->toArray());
                 $modelObject = $currentModelObject;
                 if ($model instanceof HasMany) {
                     $model->save($currentModelObject);
                 } elseif ($model instanceof BelongsToMany) {
-                    $id = $object[$modelKeys];
+                    $id = $currentModelObject[$modelKeys];
                     if (array_key_exists("pivot", $objectWithoutKey)) {
                         $pivotTitles = $objectWithoutKey["pivot"];
                         $model->attach($id, $pivotTitles);
@@ -619,12 +628,12 @@ abstract class SmartCrudController extends Controller
                     }
                 } else {
                     if (count($model->get()->toArray()) > 0) {
-                        return null;
+                        return $modelObject;
                     }
                 }
             }
         } else {
-            $modelObject = $model->create($object);
+            $modelObject = $model->create(collect($object)->only($modelFields)->toArray());
         }
         return $modelObject;
     }
@@ -1245,7 +1254,6 @@ abstract class SmartCrudController extends Controller
         if (is_null($orderBy) || $orderBy == "") {
             $orderBy = "[\"" . $this->model->getKeyName() . "\",\"DESC\"]";
         }
-//        dd($orderBy);
         return $orderBy;
     }
 
