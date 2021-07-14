@@ -457,17 +457,18 @@ abstract class SmartCrudController extends Controller
      * @return JsonResponse
      * @throws \Exception
      */
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, $lastFunction = null): JsonResponse
     {
         $response = new ResponseModel();
+        if (!$lastFunction) {
+            $validationErrors = $this->checkRequestValidation($request, $this->storeValidateArray);
 
-        $validationErrors = $this->checkRequestValidation($request, $this->storeValidateArray);
-
-        if ($validationErrors != null) {
-            $response->setStatusCode(422);
-            $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
-            $response->setError($validationErrors->toArray());
-            return SmartResponse::response($response);
+            if ($validationErrors != null) {
+                $response->setStatusCode(422);
+                $response->setMessage($this->getTrans(__FUNCTION__, 'validation_failed'));
+                $response->setError($validationErrors->toArray());
+                return SmartResponse::response($response);
+            }
         }
 
         // Method for customize
@@ -876,7 +877,7 @@ abstract class SmartCrudController extends Controller
             $request[$keyName] = $request->$queryStringKey;
         }
         $request[$this->forceUpdateKey] = true;
-        return $this->store($request);
+        return $this->store($request, "update");
     }
 
     /**
