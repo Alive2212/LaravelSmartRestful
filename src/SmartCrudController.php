@@ -496,7 +496,7 @@ abstract class SmartCrudController extends Controller
             $response->setMessage($this->getTrans(__FUNCTION__, 'success'));
             $response->setStatusCode(201);
             // Assign something before response
-            $response = $this->beforeResponse(__FUNCTION__, $response, $request);
+            $response = $this->beforeResponse($lastFunction ? : __FUNCTION__, $response, $request);
             DB::commit();
         } catch (Throwable $e) {
             DB::rollBack();
@@ -504,6 +504,7 @@ abstract class SmartCrudController extends Controller
             $response->setMessage($this->getTrans(__FUNCTION__, 'failed'));
             $response->setStatusCode(409);
         }
+//        dd($response->getData());
 
         // Response
         return SmartResponse::response($response);
