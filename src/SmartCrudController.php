@@ -877,6 +877,30 @@ abstract class SmartCrudController extends Controller
             $keyName = $this->model->getKeyName();
             $request[$keyName] = $request->$queryStringKey;
         }
+        if ($request[$keyName] == "bulk") {
+            $affectedRecords = 0;
+            $errorRecords = 0;
+            foreach ($request->except(['id']) as $item) {
+                try {
+                    DB::beginTransaction();
+                    $whereConditionKey = Arr::exists($item, "key") ? "key" : "id";
+                    $affectedRecords += $this->model->where($whereConditionKey,$item[$whereConditionKey])->update($item);
+                    DB::commit();
+                } catch (\PDOException $e) {
+                    $errorRecords += 1;
+                    DB::rollBack();
+                }
+            }
+            $responseModel = new ResponseModel();
+            $responseModel->setData(collect(
+                [
+                    'affect_records' => $affectedRecords,
+                    'error_records' => $errorRecords,
+                ]
+            ));
+            $responseModel->setMessage($this->getTrans(__METHOD__,"successful"));
+            return SmartResponse::response($responseModel);
+        }
         $request[$this->forceUpdateKey] = true;
         return $this->store($request, "update");
     }
@@ -892,20 +916,43 @@ abstract class SmartCrudController extends Controller
         // Create Response Model
         $response = new ResponseModel();
 
-        try {
-            $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
-            $index = $request->$queryStringKey;
+        $queryStringKey = $this->modelKey ? $this->modelKey : Str::singular(strtolower($this->model->getTable()));
+        $index = $request->$queryStringKey;
 
+        if ($index == "bulk") {
+            $affectedRecords = 0;
+            $errorRecords = 0;
+            foreach ($request->except(['id']) as $item) {
+                try {
+                    DB::beginTransaction();
+                    $whereConditionKey = Arr::exists($item, "key") ? "key" : "id";
+                    $affectedRecords += $this->model->where($whereConditionKey,$item[$whereConditionKey])->delete();
+                    DB::commit();
+                } catch (\PDOException $e) {
+                    $errorRecords += 1;
+                    DB::rollBack();
+                }
+            }
+            $responseModel = new ResponseModel();
+            $responseModel->setData(collect(
+                [
+                    'affect_records' => $affectedRecords,
+                    'error_records' => $errorRecords,
+                ]
+            ));
+            $responseModel->setMessage($this->getTrans(__METHOD__,"successful"));
+            return SmartResponse::response($responseModel);
+        }
+
+        try {
             $response->setData(collect(['row_affected' => (int)$this->model->findOrFail($index)->delete()]));
             $response->setMessage($this->getTrans(__FUNCTION__, 'successful'));
-
         } catch (ModelNotFoundException $exception) {
             $response->setData(collect([]));
             $response->setMessage($this->getTrans(__FUNCTION__, 'not_found'));
             $response->setStatusCode(404);
             $response->setError(['model_not_found' => $exception->getMessage()]);
         }
-
         return SmartResponse::response($response);
     }
 
