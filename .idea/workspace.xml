@@ -2,7 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="c31ffcb0-946f-4e17-bca4-5685a0e586b7" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/laravelsmartrestful.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/laravelsmartrestful.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/composer.json" beforeDir="false" afterPath="$PROJECT_DIR$/composer.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/SmartCrudController.php" beforeDir="false" afterPath="$PROJECT_DIR$/src/SmartCrudController.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -76,6 +77,7 @@
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
     <property name="nodejs_interpreter_path.stuck_in_default_project" value="undefined stuck path" />
     <property name="nodejs_npm_path_reset_for_default_project" value="true" />
+    <property name="nodejs_package_manager_path" value="npm" />
     <property name="vue.rearranger.settings.migration" value="true" />
   </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
@@ -91,7 +93,7 @@
       <updated>1579206527414</updated>
       <workItem from="1579206528514" duration="188000" />
       <workItem from="1579209728765" duration="2818000" />
-      <workItem from="1651321609142" duration="320000" />
+      <workItem from="1651321609142" duration="1212000" />
     </task>
     <servers />
   </component>

@@ -29,6 +29,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use stdClass;
 use Throwable;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\Storage;
 
 abstract class SmartCrudController extends Controller
 {
@@ -1375,5 +1377,43 @@ abstract class SmartCrudController extends Controller
             }
         }
         return $condition;
+    }
+
+    /**
+     * @param Request $request
+     * @return StreamedResponse
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $path = explode('\\', get_class($this->model));
+        $name = array_pop($path) . '-export-';
+
+        if ($request->has('fields')) {
+            try {
+                $data = $this->model
+                    ->select(json_decode($request->get('fields')))
+                    ->get();
+            } catch (\Exception $exception) {
+
+            }
+        }
+        else $data = $this->model;
+
+        $relations = $this->getRequestRelations($request);
+        $data = $this->addRelationToData($data, $this->getArrayWithPriority($this->indexRelations, $relations));
+
+        if (!is_null($request->get('filters'))) {
+            $data = (new QueryHelper())->smartDeepFilter($data, (new RequestHelper())->getCollectFromJson($request['filters'])->toArray());
+        }
+
+        $path = 'export/' . $name . '.csv';
+
+        // delete file if exists
+        Storage::disk('public')->delete($path);
+
+        // save export
+        (new ExportHelper())->createCsv($name, $data->get()->toArray());
+
+        return Storage::disk('public')->download($path);
     }
 }
