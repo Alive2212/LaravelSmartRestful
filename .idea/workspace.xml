@@ -3,7 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="c31ffcb0-946f-4e17-bca4-5685a0e586b7" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/composer.json" beforeDir="false" afterPath="$PROJECT_DIR$/composer.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/SmartCrudController.php" beforeDir="false" afterPath="$PROJECT_DIR$/src/SmartCrudController.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -93,7 +92,12 @@
       <updated>1579206527414</updated>
       <workItem from="1579206528514" duration="188000" />
       <workItem from="1579209728765" duration="2818000" />
-      <workItem from="1651321609142" duration="1212000" />
+      <workItem from="1651321609142" duration="1650000" />
+      <workItem from="1651345284167" duration="594000" />
+      <workItem from="1651393827331" duration="857000" />
+      <workItem from="1651422917528" duration="593000" />
+      <workItem from="1651518525008" duration="835000" />
+      <workItem from="1651837036204" duration="20000" />
     </task>
     <servers />
   </component>
@@ -126,6 +130,18 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="oldMeFiltersMigrated" value="true" />
   </component>
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/src/BaseController.php">

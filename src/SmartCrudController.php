@@ -971,7 +971,7 @@ abstract class SmartCrudController extends Controller
             $className = $this->defaultLocaleClass;
         }
         return trans(
-            'laravel_smart_restful::' .
+            'laravel-smart-restful::' .
             $this->localPrefix . '.' .
             ($className === '' ? '' : ($className . '.')) .
             $method . '.' .
