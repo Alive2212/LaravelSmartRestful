@@ -3,6 +3,7 @@
   <component name="ChangeListManager">
     <list default="true" id="c31ffcb0-946f-4e17-bca4-5685a0e586b7" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/composer.json" beforeDir="false" afterPath="$PROJECT_DIR$/composer.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/SmartCrudController.php" beforeDir="false" afterPath="$PROJECT_DIR$/src/SmartCrudController.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -97,7 +98,8 @@
       <workItem from="1651393827331" duration="857000" />
       <workItem from="1651422917528" duration="593000" />
       <workItem from="1651518525008" duration="835000" />
-      <workItem from="1651837036204" duration="20000" />
+      <workItem from="1651837036204" duration="74000" />
+      <workItem from="1652535632297" duration="371000" />
     </task>
     <servers />
   </component>

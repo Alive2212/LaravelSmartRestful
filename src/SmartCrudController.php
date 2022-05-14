@@ -797,10 +797,9 @@ abstract class SmartCrudController extends Controller
 
             // load relations
             $relations = $this->getRequestRelations($request);
-            $relations = $this->getArrayWithPriority($this->showRelations, $this->indexRelations, $relations);
-            $data = $this->model
+            $data = $this->addRelationToData($this->model, $this->getArrayWithPriority($this->indexRelations, $relations));
+            $data = $data
                 ->where($filters)
-                ->with($relations)
                 ->get();
             $response->setData($data);
 
