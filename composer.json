@@ -30,15 +30,15 @@
 
     },
     "require-dev": {
-        "phoenix/eloquent-meta": "1.6.*",
+        "phoenix/eloquent-meta": ">=1.6.*",
         "alive2212/laravel-excel-helper": "^4",
         "alive2212/laravel-smart-response": "^4",
         "teamtnt/laravel-scout-tntsearch-driver": "*",
         "phpunit/phpunit" : ">=5.4.3",
-        "laravel/framework": "^8",
+        "laravel/framework": ">=8",
         "laravel/passport": "*",
-        "illuminate/http": "^8",
-        "squizlabs/php_codesniffer": "^2.3",
+        "illuminate/http": ">=8",
+        "squizlabs/php_codesniffer": ">=2.3",
         "fico7489/laravel-pivot":"*"
     },
     "autoload": {

@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -354,13 +355,18 @@ abstract class SmartCrudController extends Controller
 
 
         try {
-            $data = $request->get('query') != null ?
+            $idsArray = [];
+            if ($request->get('q') != null) {
+                foreach ((collect($this->model
+                    ->search(($request->get('q')))
+                    ->raw())->get('ids')) as $item) {
+                    $idsArray = array_merge($idsArray, [str_replace('"',"", $item)]);
+                }
+            }
+            $data = $request->get('q') != null ?
                 $this->model
-                    ->whereKey(collect($this->model
-                        ->search(($request->get('query')))
-                        ->raw())->get('ids')) :
+                    ->whereKey($idsArray) :
                 $this->model;
-
             // load relations
             $relations = $this->getRequestRelations($request);
             $data = $this->addRelationToData($data, $this->getArrayWithPriority($this->indexRelations, $relations));
@@ -375,7 +381,25 @@ abstract class SmartCrudController extends Controller
                 $data = (new QueryHelper())->orderBy($data, (new RequestHelper())->getCollectFromJson($request['order_by']));
             }
 
-            $finalData = collect($data->paginate($pageSize));
+
+            $finalData = $data->paginate($pageSize);
+
+            if ($request->has('loadMorph')) {
+                $morphs = $request->get('loadMorph');
+                if (gettype($morphs) == 'string') {
+                    $morphs = json_decode($morphs, true);
+                }
+
+                foreach ($morphs as $morphKey => $morph) {
+                    $array = [];
+                    foreach ($morph as $key => $value) {
+                        $array[Relation::$morphMap[$key]] = $value;
+                    }
+                    $finalData->loadMorph($morphKey, $array);
+                }
+            }
+
+            $finalData = collect($finalData);
 
             // Summation
             if ($request->get('summations') != null) {
@@ -538,14 +562,14 @@ abstract class SmartCrudController extends Controller
                 $userId = Auth::id();
 
                 //add author id into the request if doesn't exist
-                if (!Arr::has($object, 'author_id')) {
-                    $object['author_id'] = $userId;
-                }
+                //if (!Arr::has($object, 'author_id')) {
+                //  $object['author_id'] = $userId;
+                // }
 
                 //add user id into the request if doesn't exist
-                if (!Arr::has($object, 'user_id')) {
-                    $object['user_id'] = $userId;
-                }
+                // if (!Arr::has($object, 'user_id')) {
+                //  $object['user_id'] = $userId;
+                // }
 
                 [$tmp, $resultObjectItem] = $this->createObjectsInDB($model, $modelKeys, $object);
                 array_push($resultObject, $resultObjectItem);
