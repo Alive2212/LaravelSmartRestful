@@ -6,8 +6,6 @@
       <change beforePath="$PROJECT_DIR$/.idea/php.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/php.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/composer.json" beforeDir="false" afterPath="$PROJECT_DIR$/composer.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/composer.lock" beforeDir="false" afterPath="$PROJECT_DIR$/composer.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/SmartCrudController.php" beforeDir="false" afterPath="$PROJECT_DIR$/src/SmartCrudController.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -33,11 +31,6 @@
         <option value="$PROJECT_DIR$/composer.json" />
       </list>
     </option>
-  </component>
-  <component name="PhpWorkspaceProjectConfiguration">
-    <include_path>
-      <path value="$PROJECT_DIR$/vendor/composer" />
-    </include_path>
   </component>
   <component name="ProjectFrameBounds" extendedState="6">
     <option name="x" value="67" />
@@ -117,7 +110,8 @@
       <workItem from="1651837036204" duration="74000" />
       <workItem from="1652535632297" duration="371000" />
       <workItem from="1670500705225" duration="606000" />
-      <workItem from="1680606099040" duration="424000" />
+      <workItem from="1680606099040" duration="713000" />
+      <workItem from="1680607144755" duration="1977000" />
     </task>
     <servers />
   </component>

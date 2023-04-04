@@ -30,7 +30,7 @@
 
     },
     "require-dev": {
-        "phoenix/eloquent-meta": ">=1.6.*",
+        "phoenix/eloquent-meta": ">=1.6",
         "alive2212/laravel-excel-helper": "^4",
         "alive2212/laravel-smart-response": "^4",
         "teamtnt/laravel-scout-tntsearch-driver": "*",
