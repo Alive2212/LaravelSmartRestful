@@ -18,7 +18,6 @@
     ],
     "require": {
         "php": ">=7",
-        "alive2212/laravel-excel-helper": "^4",
         "alive2212/laravel-onion-pattern": "^4",
         "alive2212/laravel-query-helper": "^4",
         "alive2212/laravel-reflection-helper": "^4",
