@@ -668,7 +668,7 @@ abstract class SmartCrudController extends Controller
                         $model->getParent()->save();
                     }
                 } else {
-                    if (count($model->get()->toArray()) > 0) {
+                    if ($model->count() > 0) {
                         return $modelObject;
                     }
                 }
