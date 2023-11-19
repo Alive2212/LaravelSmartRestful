@@ -276,7 +276,10 @@ abstract class SmartCrudController extends Controller
 
     public function getSum($item, array $methods, $column)
     {
-        if (count($methods) < 1) return 0;
+
+        if (count($methods) < 1) {
+            return $item->sum($column);
+        }
         if (count($methods) == 1) {
             if ($item instanceof Collection) {
                 return $item->sum($column);
@@ -412,10 +415,17 @@ abstract class SmartCrudController extends Controller
                     $methods = explode(".", $summationItems);
                     $column = array_pop($methods);
                     $relation = implode('.', $methods);
+                    if($relation){
+                        $summaryResult = $query->with($relation)->whereHas($relation)->limit(9999999)->offset(0)->get()->sum(function ($item) use ($methods, $column) {
+                            return $this->getSum($item, $methods, $column);
+                        });
+                    }else{
+                        $summaryResult = $query->limit(9999999)->offset(0)->get()->sum(function ($item) use ($methods, $column) {
+                            return $this->getSum($item, $methods, $column);
+                        });
 
-                    $summaryResult = $query->with($relation)->whereHas($relation)->limit(9999999)->offset(0)->get()->sum(function ($item) use ($methods, $column) {
-                        return $this->getSum($item, $methods, $column);
-                    });
+                    }
+
                     $summationsResults[$summationItems] = $summaryResult;
                 }
                 $finalData['summations'] = $summationsResults;
@@ -609,10 +619,10 @@ abstract class SmartCrudController extends Controller
             $objectWithoutKey,
             $objectWithoutKey
         );
-        if (
-            is_array($condition) &&
-            count($condition)
-        ) {
+
+
+        if (is_array($condition) && count($condition))
+        {
             $currentModelObject = $model->getModel()->where($condition)->first();
             if ($currentModelObject == null) {
                 if ($model instanceof MorphOne) {
@@ -653,7 +663,7 @@ abstract class SmartCrudController extends Controller
                         $model->save($currentModelObject);
                     }
                 } elseif ($model instanceof BelongsTo) {
-                    if ($currentModelObject->get()->toArray() > 0) {
+                    if ($currentModelObject->toArray() > 0) {
                         $model->associate($currentModelObject);
                         $model->getParent()->save();
                     }
