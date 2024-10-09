@@ -916,10 +916,13 @@ abstract class SmartCrudController extends Controller
             $affectedRecords = 0;
             $errorRecords = 0;
             foreach ($request->except(['id']) as $item) {
+                if (!is_array($item) || empty($item)) {
+                    continue;
+                }
                 try {
                     DB::beginTransaction();
-                    $whereConditionKey = Arr::exists($item, "key") ? "key" : "id";
-                    $affectedRecords += $this->model->where($whereConditionKey,$item[$whereConditionKey])->update($item);
+                    $whereConditionKey = isset($item["key"]) ? "key" : "id";
+                    $affectedRecords += $this->model->where($whereConditionKey, $item[$whereConditionKey])->update($item);
                     DB::commit();
                 } catch (\PDOException $e) {
                     $errorRecords += 1;
